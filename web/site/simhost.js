@@ -83,24 +83,57 @@ const inThread = {
   peek: (o, m, a) => K[SIDE[o]][m](...a),
 };
 
-/** The sim in a worker: commands and calls are messages, answered in order. */
-function viaWorker(w) {
+/**
+ * The sim in a worker: commands and calls are messages, answered in order. The worker behind it can change (a restart
+ * after a crash): `hold()` keeps new messages back meanwhile, `release()` sends them to the new worker, `flushTo()`
+ * runs them on the page's thread when the sim moved there.
+ */
+function viaWorker() {
   let seq = 0;
+  let cur = null;
+  let held = null;
   const waiting = new Map();
-  return {
+  const t = {
     name: 'worker',
     waiting,
     view: inThread.view,
-    send: (o, m, a) => { if (o === 'live') K.view[m](...a); else w.postMessage({ t: 'send', o: SIDE[o], m, a }); },
+    /** A message for the sim's worker (in order; kept back while a restart is under way). */
+    post: (msg) => { if (held) held.push(msg); else cur?.postMessage(msg); },
+    use: (w) => { cur = w; },
+    hold: () => { held = held || []; },
+    release: () => { const h = held || []; held = null; for (const m of h) cur?.postMessage(m); },
+    /** The sim now runs on the page's thread: what was held runs there, in order. */
+    flushTo: () => {
+      const h = held || [];
+      held = null;
+      for (const m of h) {
+        if (m.t === 'send') { try { K[m.o][m.m](...m.a); } catch (e) { console.error(e); } continue; }
+        const p = waiting.get(m.id);
+        waiting.delete(m.id);
+        if (!p) continue;
+        try { p.resolve(K[m.o][m.m](...m.a)); } catch (e) { p.reject(e); }
+      }
+    },
+    /** Every call still waiting for an answer fails (the worker is gone). */
+    lost: (why) => {
+      const all = [...waiting.values()];
+      waiting.clear();
+      held = null;
+      for (const p of all) p.reject(new Error(why));
+    },
+    send: (o, m, a) => { if (o === 'live') K.view[m](...a); else t.post({ t: 'send', o: SIDE[o], m, a }); },
     call: (o, m, a) => new Promise((resolve, reject) => {
       const id = ++seq;
       waiting.set(id, { resolve, reject });
-      w.postMessage({ t: 'call', id, o: SIDE[o], m, a });
+      t.post({ t: 'call', id, o: SIDE[o], m, a });
     }),
   };
+  return t;
 }
 
 let transport = inThread;
+/** The sim's mode and speed as the page last set them: a restarted sim is put back there. */
+const resume = { mode: null, speed: null };
 
 const latest = new Map();
 const keyOf = (o, m, a) => (a.length ? `${o}.${m}${JSON.stringify(a)}` : `${o}.${m}`);
@@ -113,9 +146,12 @@ function remember(o, m, a, v) {
 function facade(o) {
   const f = { peek: {} };
   for (const m of API[o].view) f[m] = (...a) => transport.view(o, m, a);
-  for (const m of API[o].send) f[m] = (...a) => transport.send(o, m, a);
+  for (const m of API[o].send) f[m] = (...a) => { if (o === 'live' && m === 'setSpeed') resume.speed = a; transport.send(o, m, a); };
   for (const m of API[o].call) {
-    f[m] = (...a) => transport.call(o, m, a).then((v) => remember(o, m, a, v));
+    f[m] = (...a) => {
+      if (o === 'sb' && m === 'setMode') resume.mode = a;
+      return transport.call(o, m, a).then((v) => remember(o, m, a, v));
+    };
     f.peek[m] = (...a) => {
       if (transport === inThread && !PEEK_ONLY.has(`${o}.${m}`)) return remember(o, m, a, inThread.peek(o, m, a));
       if (!PEEK_ONLY.has(`${o}.${m}`)) f[m](...a).catch(() => {});
@@ -146,18 +182,19 @@ live.start = async (canvas, base, quality, events) => {
   const fail = (t) => { console.error(t); try { events.onError?.(t?.message || String(t)); } catch { /* the page's handler */ } throw t; };
   const noWorker = new URLSearchParams(location.search).has('noworker') || typeof Worker === 'undefined';
   if (!noWorker) {
-    let w = null;
-    try { w = startWorker(base); } catch (e) { console.warn('[SimHost] no worker:', e); }
-    if (w) {
+    bootBase = base;
+    let sess = null;
+    try { sess = startWorker(base); } catch (e) { console.warn('[SimHost] no worker:', e); }
+    if (sess) {
       const view = K.view.start(canvas, base, quality, events);
       try {
-        await w.ready;
-        transport = w.transport;
+        await sess.ready;
+        sess.up();
         await view;
         return;
       } catch (e) {
         console.warn('[SimHost] the sim worker did not start, running the sim on the page:', e?.message || e);
-        w.close();
+        sess.close();
         // the view keeps loading meanwhile; it draws this thread's sim from here on
         try { useInThread(); await K.sim.boot(base); } catch (err) { fail(err); }
         try { await view; } catch (err) { fail(err); }
@@ -178,18 +215,84 @@ function useInThread() {
   K.view.bindInThread();
 }
 
-/** Starts the worker; `ready` resolves once its sim is built (and rejects if it cannot start). */
+// ---------------------------------------------------------------------------------------------------- page-side storage
+
+/**
+ * The page's copy of My tank's saves as the worker last wrote them (it is also in localStorage; this is the same text, kept
+ * so that a page that is closing, or a worker that has to restart, never waits on the worker).
+ */
+const mirror = new Map();
+const touched = new Set();
+function loadMirror() {
+  for (const k of STORE_KEYS) { try { const v = localStorage.getItem(k); if (v != null) mirror.set(k, v); } catch { /* private mode */ } }
+}
+loadMirror();
+function writeKey(k) {
+  try {
+    const v = mirror.get(k);
+    if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+  } catch { /* private mode, or full: tried again at the next flush */ }
+}
+/** Mirrored copy -> localStorage, synchronously: the latest save the worker made, whatever the worker is doing now. */
+function flushMirror() { for (const k of touched) writeKey(k); }
+function onStore(key, value) {
+  if (value == null) mirror.delete(key); else mirror.set(key, value);
+  touched.add(key);
+  writeKey(key);
+}
+// the page is going away (hidden, or closed outright): write the mirrored copy now, without asking the worker
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushMirror(); });
+window.addEventListener('pagehide', flushMirror);
+
+// ---------------------------------------------------------------------------------------------------- the worker
+
+/** Heartbeat: a ping every [every] ms; a worker that has not answered one in [timeout] ms is dead. (QA changes them.) [stable]: see lostSim. */
+const heartbeat = { every: 2000, timeout: 15000, stable: 60000 };
+const READY_TIMEOUT_MS = 120000;
+const MAX_RESTARTS = 2;
+let bootBase = '';
+let tw = null;          // the worker transport (one for the page's life: the worker behind it can change)
+let current = null;     // the worker session in use
+let restarts = 0;
+let stableSince = 0;
+const qaTest = { failBoots: 0 };
+
+/** A small, non-blocking note at the bottom of the page. */
+function notice(text) {
+  try {
+    const el = document.createElement('div');
+    el.setAttribute('role', 'status');
+    el.className = 'simnotice';
+    el.textContent = text;
+    el.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);max-width:min(92vw,420px);padding:8px 14px;' +
+      'border-radius:10px;background:rgba(20,30,40,.92);color:#fff;font:13px/1.35 system-ui,sans-serif;z-index:99999;' +
+      'pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.35)';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 8000);
+  } catch { /* no page to tell */ }
+}
+
+/**
+ * Starts a worker; `ready` resolves once its sim is built (and rejects if it cannot start). Until `up()` is called a
+ * failure only rejects `ready`; after, a worker error or a missing heartbeat means the sim is lost (lostSim).
+ */
 function startWorker(base) {
+  if (!tw) tw = viaWorker();
   const w = new Worker(new URL('./simworker.js', import.meta.url), { type: 'module' });
-  const t = viaWorker(w);
   const dec = new Decoder({ ctors, canon: ReefWire.getInstance().canon() });
   let unpack = 0, unpackAt = performance.now();
-  let alive = false, closed = false;
+  let alive = false, closed = false, running = false;
   let ok, ko;
   const ready = new Promise((a, b) => { ok = a; ko = b; });
-  const lost = (why) => {
-    for (const p of t.waiting.values()) p.reject(new Error(why));
-    t.waiting.clear();
+  let beat = 0, pinging = 0, pingN = 0, helloTimer = 0, readyTimer = 0;
+  const sess = { w, ready };
+  const stop = () => { closed = true; clearInterval(beat); clearTimeout(readyTimer); clearTimeout(helloTimer); };
+  const die = (why) => {
+    if (closed) return;
+    stop();
+    try { w.terminate(); } catch { /* gone */ }
+    if (!running) { ko(new Error(why)); return; }
+    if (current === sess) lostSim(why);
   };
   w.onmessage = (e) => {
     const d = e.data;
@@ -197,10 +300,11 @@ function startWorker(base) {
       case 'hello': alive = true; break;
       case 'ready': ok(); break;
       case 'failed': ko(new Error(d.why)); break;
+      case 'pong': if (d.n === pingN) pinging = 0; break;
       case 'reply': {
-        const p = t.waiting.get(d.id);
+        const p = tw.waiting.get(d.id);
         if (!p) break;
-        t.waiting.delete(d.id);
+        tw.waiting.delete(d.id);
         if (d.err !== undefined) p.reject(new Error(d.err)); else p.resolve(d.v);
         break;
       }
@@ -211,9 +315,7 @@ function startWorker(base) {
         break;
       }
       case 'fx': K.view.applyFx(d.op, dec.decode(d.m)); break;
-      case 'store':
-        try { if (d.value == null) localStorage.removeItem(d.key); else localStorage.setItem(d.key, d.value); } catch { /* private mode */ }
-        break;
+      case 'store': onStore(d.key, d.value); break;
       case 'stats': {
         const now = performance.now();
         K.view.workerStats(d.sim, d.pack, unpack * 1000 / Math.max(1, now - unpackAt));
@@ -227,16 +329,92 @@ function startWorker(base) {
     e.preventDefault?.();
     const why = `sim worker error: ${e.message || 'could not load'}`;
     console.error(why);
-    ko(new Error(why));
-    lost(why);
+    die(why);
   };
+  w.onmessageerror = () => die('sim worker message error');
   // a browser that cannot run module workers never says hello
-  setTimeout(() => { if (!alive && !closed) ko(new Error('the worker did not answer')); }, 20000);
+  helloTimer = setTimeout(() => { if (!alive) die('the worker did not answer'); }, 20000);
+  readyTimer = setTimeout(() => die('the worker took too long to start'), READY_TIMEOUT_MS);
   const store = {};
-  for (const k of STORE_KEYS) { try { const v = localStorage.getItem(k); if (v != null) store[k] = v; } catch { /* private mode */ } }
-  w.postMessage({ t: 'boot', base, store, reducedMotion: reducedMotion(), loaded: LOADED, print: classPrint(ctors, LOADED) });
-  K.view.bindRemote((m, a) => w.postMessage({ t: 'send', o: 'sim', m, a }));
-  return { ready, transport: t, close: () => { closed = true; lost('worker closed'); w.terminate(); } };
+  for (const [k, v] of mirror) store[k] = v;
+  const testFail = qaTest.failBoots > 0;
+  if (testFail) qaTest.failBoots--;
+  w.postMessage({ t: 'boot', base, store, reducedMotion: reducedMotion(), loaded: LOADED, print: classPrint(ctors, LOADED), testFail });
+  /** The sim runs here from now on. */
+  sess.up = () => {
+    if (closed) throw new Error('the worker is gone');
+    running = true;
+    clearTimeout(readyTimer);
+    current = sess;
+    tw.use(w);
+    transport = tw;
+    K.view.bindRemote((m, a) => tw.post({ t: 'send', o: 'sim', m, a }));
+    pinging = 0;
+    beat = setInterval(() => {
+      if (pinging) { if (performance.now() - pinging > heartbeat.timeout) die('the sim worker stopped answering'); return; }
+      pinging = performance.now();
+      w.postMessage({ t: 'ping', n: ++pingN });
+    }, heartbeat.every);
+  };
+  sess.kill = () => { stop(); try { w.terminate(); } catch { /* gone */ } };
+  sess.close = () => { sess.kill(); tw.lost('worker closed'); };
+  return sess;
+}
+
+/**
+ * The worker is gone after boot (error, or no heartbeat): every call waiting for it fails, then the sim restarts in a
+ * new worker from the last mirrored My tank. After MAX_RESTARTS restarts that do not hold, the sim moves to the page's
+ * thread (as with ?noworker), with no reload. New calls wait meanwhile and are answered by whichever comes up.
+ */
+async function lostSim(why) {
+  console.error(`[SimHost] ${why}`);
+  current?.kill();
+  current = null;
+  tw.lost(why);
+  tw.hold();
+  flushMirror();
+  // a restarted worker that lasted [stable] ms was a good restart: this crash gets its tries afresh
+  if (performance.now() - stableSince > heartbeat.stable) restarts = 0;
+  while (restarts < MAX_RESTARTS) {
+    restarts++;
+    const sess = startWorker(bootBase);
+    try {
+      await sess.ready;
+      sess.up();
+      stableSince = performance.now();
+      tw.release();
+      replayState();
+      notice('The tank engine restarted. Your tank was restored from its last save.');
+      return;
+    } catch (e) {
+      console.warn('[SimHost] the worker restart failed:', e?.message || e);
+      sess.kill();
+      current = null;
+    }
+  }
+  // the restarts failed: the sim runs on this thread
+  try {
+    K.sim.setReducedMotion(reducedMotion());
+    K.view.bindInThread();
+    await K.sim.boot(bootBase);
+    transport = inThread;
+    replayState();
+    tw.flushTo();
+    notice('The tank engine could not restart, so it now runs in the page. Your tank was restored from its last save.');
+  } catch (e) {
+    console.error('[SimHost] the sim could not run on the page either:', e);
+    transport = inThread;
+    tw.lost(`sim unavailable: ${e?.message || e}`);
+    notice('The tank engine stopped. Please reload the page.');
+  }
+}
+
+/** Puts a restarted sim back in the mode and at the speed the page last set. */
+function replayState() {
+  try {
+    if (resume.mode) transport.send('sb', 'setMode', resume.mode);
+    if (resume.speed) K.view.setSpeed(...resume.speed);
+  } catch (e) { console.error(e); }
 }
 
 /**
@@ -256,7 +434,16 @@ function qa(o, f) {
   });
 }
 // the Promise facade itself, for QA scripts (the page is one bundle: importing simhost.js again would load a second copy)
-window.reefhost = { live, sb, my, where, snapshot };
+window.reefhost = { live, sb, my, where, snapshot, heartbeat, test: {
+  /** QA: the worker dies without a word (the heartbeat notices). */
+  crash: () => current?.w.terminate(),
+  /** QA: the worker reports an error. */
+  error: () => current?.w.dispatchEvent(new ErrorEvent('error', { message: 'test error' })),
+  /** QA: the worker stops answering (stuck in a loop). */
+  hang: () => current?.w.postMessage({ t: 'test', hang: true }),
+  /** QA: the next [n] workers started fail to boot. */
+  failBoots: (n) => { qaTest.failBoots = n; },
+} };
 window.reeflive = qa('live', live);
 window.reefsandbox = qa('sb', sb);
 window.reefmytank = qa('my', my);
