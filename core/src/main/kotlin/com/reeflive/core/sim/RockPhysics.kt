@@ -43,6 +43,13 @@ class RockPhysics(
     /** Something was taken out from under the rocks: check every rock's footing at the next step. */
     private var recheck = false
 
+    /**
+     * Off-screen builds (a store's display tank) skip the field's refresh every [REFRESH_S] while rocks fall: it is most of
+     * a step's cost, and nothing reads the composite field until a rock comes to rest ([sleep] refreshes) or the next rock
+     * is placed ([Simulation.placeRock] refreshes first).
+     */
+    var deferRefresh = false
+
     /** Rocks that came to rest since the last [drainSettled] (the sim refreshes sand, anchors and corals and reports). */
     private val settled = ArrayList<Settle>()
     class Settle(val body: RockBody, val moveCm: Double, val turnDeg: Double, val x: Double, val y: Double, val z: Double)
@@ -125,8 +132,13 @@ class RockPhysics(
         member: (Int, Int, Int) -> Boolean, touch: (Int, Int, Int) -> Int,
     ) {
         val cv = cell * cell * cell
+        // membership of the box and one cell of margin, asked once per cell (the 26-neighbour probe below reads this)
+        val bi = box[0] - 1; val bj = box[1] - 1; val bk = box[2] - 1
+        val gx = box[3] - box[0] + 3; val gy = box[4] - box[1] + 3; val gz = box[5] - box[2] + 3
+        val mem = BooleanArray(gx * gy * gz)
+        for (k in 0 until gz) for (j in 0 until gy) for (i in 0 until gx) mem[(k * gy + j) * gx + i] = member(bi + i, bj + j, bk + k)
         var n = 0; var sx = 0.0; var sy = 0.0; var sz = 0.0
-        for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) if (member(i, j, k)) {
+        for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) if (mem[((k - bk) * gy + (j - bj)) * gx + (i - bi)]) {
             n++; sx += cx(i); sy += cy(j); sz += cz(k)
         }
         n = max(n, 1)
@@ -143,7 +155,8 @@ class RockPhysics(
         val qx = ArrayList<Double>(); val qy = ArrayList<Double>(); val qz = ArrayList<Double>()
         val rp = ArrayList<Int>()
         for (k in box[2]..box[5]) for (j in box[1]..box[4]) for (i in box[0]..box[3]) {
-            if (!member(i, j, k)) continue
+            val at = ((k - bk) * gy + (j - bj)) * gx + (i - bi)
+            if (!mem[at]) continue
             val rx = cx(i) - b.comRest[0]; val ry = cy(j) - b.comRest[1]; val rz = cz(k) - b.comRest[2]
             ib[0] += mc * (ry * ry + rz * rz) + own; ib[4] += mc * (rx * rx + rz * rz) + own; ib[8] += mc * (rx * rx + ry * ry) + own
             ib[1] -= mc * rx * ry; ib[2] -= mc * rx * rz; ib[5] -= mc * ry * rz
@@ -152,7 +165,7 @@ class RockPhysics(
             var tch = -1
             for (dk in -1..1) for (dj in -1..1) for (di in -1..1) {
                 if (di == 0 && dj == 0 && dk == 0) continue
-                if (member(i + di, j + dj, k + dk)) continue
+                if (mem[at + (dk * gy + dj) * gx + di]) continue
                 val w = 1.0 / sqrt((di * di + dj * dj + dk * dk).toDouble())
                 ex += di * w; ey += dj * w; ez += dk * w
                 if (abs(di) + abs(dj) + abs(dk) == 1) face = true
@@ -251,7 +264,7 @@ class RockPhysics(
         }
         if (subs >= MAX_SUBSTEPS) stepAcc = 0.0
         refreshAcc += dt
-        if (refreshAcc >= REFRESH_S || !anyAwake) { refreshAcc = 0.0; field.refresh() }
+        if ((refreshAcc >= REFRESH_S && !deferRefresh) || !anyAwake) { refreshAcc = 0.0; field.refresh() }
         version++
         return true
     }
@@ -464,12 +477,16 @@ class RockPhysics(
         for (p in b.pieces) field.setTransform(p, xfTmp)
     }
 
-    /** Distance from (x, y, z) to everything [b] can hit but the glass and sand: static rock and the other moved rocks. */
+    /**
+     * Distance from (x, y, z) to everything [b] can hit but the glass and sand: static rock and the other moved rocks,
+     * and at most [ENV_CAP]: [gather] only looks at probes within a probe's radius and at the slope there, and a cap lets
+     * [DynamicRockSdf.pieceFar] skip every rock that is not within reach.
+     */
     private fun env(b: RockBody, x: Double, y: Double, z: Double): Double {
-        var d = field.staticDist(x, y, z)
+        var d = min(field.staticDist(x, y, z), ENV_CAP)
         for (o in bodies) {
             if (o === b || !o.moved) continue
-            for (p in o.pieces) d = min(d, field.pieceDist(p, x, y, z))
+            for (p in o.pieces) if (!field.pieceFar(p, x, y, z, d)) d = min(d, field.pieceDist(p, x, y, z))
         }
         return d
     }
@@ -656,6 +673,7 @@ class RockPhysics(
         const val ITERATIONS = 10
         /** Probes sit on boundary cell centres, half a cell inside the surface. */
         const val PROBE_R = 0.5
+        const val ENV_CAP = 3.0
         const val BOTTOM_NY = 0.35
         const val ROCK_SUPPORT_NY = 0.5
         const val GLASS_TOL = 0.6

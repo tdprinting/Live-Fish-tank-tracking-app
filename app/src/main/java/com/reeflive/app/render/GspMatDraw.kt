@@ -55,7 +55,7 @@ class GspMatDraw {
             proto == null -> null
             built != null -> {
                 val def = DryRock.def(built.shape, built.seed)
-                val d = DryRockMesh.build(def, built.seed)
+                val d = DryRockMesh.cached(built.shape, built.seed)
                 build(c, d.vertices, d.indices, null, density) { x, y, z -> def.dist(x, y, z) }
             }
             rock?.prim != null && sdf != null -> {

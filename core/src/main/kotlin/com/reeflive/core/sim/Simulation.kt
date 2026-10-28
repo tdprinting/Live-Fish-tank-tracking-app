@@ -236,6 +236,16 @@ class Simulation private constructor(
         rockGuard.onHit = if (on) { x, y, z, jx, jy, jz -> rp.bump(x, y, z, jx, jy, jz) } else null
     }
 
+    /** Builders that settle rocks off screen: no field refresh while they fall ([RockPhysics.deferRefresh]); turning it off catches up. */
+    fun deferRockRefresh(on: Boolean) {
+        val rp = rockPhysics ?: return
+        rp.deferRefresh = on
+        if (!on) rp.field.refresh()
+    }
+
+    /** Whether any rock is still falling or settling. */
+    val rocksAwake: Boolean get() = rockPhysics?.anyAwake == true
+
     private fun stepRocks(dt: Double) {
         val rp = rockPhysics ?: return
         // static scape: only a rock just dropped in with the aquascape builder falls (no support checks)
@@ -451,6 +461,7 @@ class Simulation private constructor(
     fun placeRock(shape: DryRockShape, x: Double, z: Double, yawDeg: Double = 0.0, seed: Int = -1, agedDays: Double = 0.0): String? {
         val rp = rockPhysics ?: return null
         rp.build()
+        if (rp.deferRefresh) rp.field.refresh()
         resolveCoralRocks()
         val sd = if (seed >= 0) seed else (config.seed.toInt() * 31 + (++placeSeq) * 7477 + (simTimeSec * 13).toInt()) and 0x7fffffff
         val def = DryRock.def(shape, sd)
@@ -718,6 +729,26 @@ class Simulation private constructor(
         forceFullBehavior = prevForce
         behaviorEnabled = prevBehavior
         latest = snapshot()
+    }
+
+    /**
+     * [advance] for [count] steps of [dt] without the closing snapshot, so an off-screen build can run a few steps per
+     * frame ([com.reeflive.core.custom.economy.DisplayBuild]); call [stepWall] (0 s) when it is done to publish the state.
+     */
+    fun advanceSteps(count: Int, dt: Double = 0.05, fullBehavior: Boolean = true) {
+        val prevForce = forceFullBehavior
+        val prevBehavior = behaviorEnabled
+        forceFullBehavior = fullBehavior
+        repeat(count) {
+            drainCommands()
+            feedSubWatch()
+            submarine.step(dt, rock, sand)
+            bags.stepWall(this, dt)
+            net.stepWall(this, dt)
+            advanceInternal(dt, dt)
+        }
+        forceFullBehavior = prevForce
+        behaviorEnabled = prevBehavior
     }
 
     /** Health/chemistry only (behavior off) — 90-day tests. Abstract feeding still applies. */

@@ -26,18 +26,30 @@ object CustomTank {
      * A new, empty tank: cured rock and sand, cycled filter bacteria (fish can go in on day one, as with a tank set up
      * on mature live rock), clean new salt water, no algae, macro or coralline yet. Pods come with the rock.
      */
-    fun fresh(build: TankBuild, species: SpeciesCatalog, rock: RockData, startTimeSec: Double, seed: Long): Simulation {
+    fun fresh(build: TankBuild, species: SpeciesCatalog, rock: RockData, startTimeSec: Double, seed: Long): Simulation =
+        freshSteps(build, species, rock, startTimeSec, seed).let { steps -> var last: Simulation? = null; for (s in steps) if (s != null) last = s; last!! }
+
+    /**
+     * [fresh] in pieces for a host that builds a tank between frames (a store's display tanks): yields null after each piece
+     * of work and the finished tank last. The same tank as [fresh], made in the same order.
+     */
+    fun freshSteps(build: TankBuild, species: SpeciesCatalog, rock: RockData, startTimeSec: Double, seed: Long): Sequence<Simulation?> = sequence {
         val water = WaterState(
             volumeL = build.liters, no3 = 0.5, po4 = 0.01, detritus = 0.02, algaeHair = 0.0, macro = 0.0, coralline = 0.02,
             diatoms = 0.0, cyano = 0.0, silicate = 0.3, microbes = 0.5, doc = 0.5,
         )
         val sim = Simulation(build.config(seed), species, rock.inTank(build.shape), seed, startTimeSec, water, emptyList())
+        yield(null)
+        // the rock field's grid is the biggest single piece of the rock physics' set-up (setDynamicRocks builds on it)
+        sim.rockPhysics?.field?.prepare()
+        yield(null)
         applyBuild(sim, build)
+        yield(null)
         // Tee's rockscape, cut down and centred when the tank is smaller than his
         sim.fitStockScape()
         // cured rock carries the pods but no bristleworms yet: they ride in later on frags, rock and bags (Hitchhikers)
         sim.water.micro.setTotal(MicroGroup.BRISTLEWORM, 0.0)
-        return sim
+        yield(sim)
     }
 
     private fun applyBuild(sim: Simulation, build: TankBuild) {

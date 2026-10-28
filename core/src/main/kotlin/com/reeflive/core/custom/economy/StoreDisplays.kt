@@ -1,14 +1,11 @@
 package com.reeflive.core.custom.economy
 
-import com.reeflive.core.custom.CustomTank
 import com.reeflive.core.custom.TankBuild
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.geom.Vec3
 import com.reeflive.core.sim.DryRockShape
 import com.reeflive.core.sim.Coral
-import com.reeflive.core.sim.RockData
 import com.reeflive.core.sim.Simulation
-import com.reeflive.core.sim.SpeciesCatalog
 import com.reeflive.core.sim.Stocking
 import com.reeflive.core.sim.TankFilter
 import kotlin.math.min
@@ -167,27 +164,46 @@ object StoreDisplays {
     }
 
     /**
-     * Builds [setup]'s rockwork in a fresh display tank: Tee's rock comes out, the recipe's cured rock goes in pass by
-     * pass (each pass falls and settles on the one before), then the scape freezes.
+     * Builds [setup]'s rockwork in a fresh display tank, a step at a time ([DisplayBuild] runs a few per frame): Tee's rock
+     * comes out, the recipe's cured rock goes in pass by pass (each pass falls and settles on the one before), then every
+     * rock settles to rest and the scape freezes. Nothing of the tank is on screen meanwhile, so the rocks fall without the
+     * field refresh a live tank needs ([Simulation.deferRockRefresh]), and a tank handed over is at rest: no rock is still
+     * jostling (and costing a frame's worth of physics) when the keeper walks up to it.
      */
-    fun buildScape(sim: Simulation, setup: DisplaySetup, seed: Int) {
-        if (setup.scape == DisplayScape.STOCK) { sim.setDynamicRocks(false); return }
+    fun scapeSteps(sim: Simulation, setup: DisplaySetup, seed: Int): Sequence<Unit> = sequence {
+        if (setup.scape == DisplayScape.STOCK) { sim.setDynamicRocks(false); return@sequence }
         sim.clearRocks()
+        yield(Unit)
         val drops = recipe(setup.scape)
         val len = sim.rock.lengthCm
         val dep = sim.rock.widthCm
         val passes = drops.maxOfOrNull { it.pass } ?: -1
+        sim.deferRockRefresh(true)
         for (pass in 0..passes) {
-            drops.forEachIndexed { i, d ->
-                if (d.pass == pass) sim.placeRock(d.shape, d.fx * len, d.fz * dep, d.yaw, (seed * 131 + i * 17) and 0x7fffffff, CURED_DAYS)
+            for (i in drops.indices) {
+                val d = drops[i]
+                if (d.pass != pass) continue
+                sim.placeRock(d.shape, d.fx * len, d.fz * dep, d.yaw, (seed * 131 + i * 17) and 0x7fffffff, CURED_DAYS)
+                yield(Unit)
             }
             // each rock drops from just above what is under it: a few seconds settles it
-            sim.advance(SETTLE_SEC, fullBehavior = false)
+            var left = SETTLE_STEPS
+            while (left > 0) { val n = min(left, STEP_CHUNK); sim.advanceSteps(n, STEP_DT, fullBehavior = false); left -= n; yield(Unit) }
         }
+        // rocks that were still easing into their final seat sleep before the keeper sees them
+        var left = REST_STEPS
+        while (left > 0 && sim.rocksAwake) { sim.advanceSteps(STEP_CHUNK, STEP_DT, fullBehavior = false); left -= STEP_CHUNK; yield(Unit) }
+        sim.deferRockRefresh(false)
         sim.setDynamicRocks(false)
     }
 
-    private const val SETTLE_SEC = 4.0
+    /** The settle after a rock drops: 4 s of sim time, in 0.05 s steps, [STEP_CHUNK] at a time. */
+    private const val STEP_DT = 0.05
+    private const val SETTLE_STEPS = 80
+    private const val STEP_CHUNK = 4
+    /** At most this many more steps (15 s, a rock's longest stay awake) for rocks still moving after the last pass. */
+    private const val REST_STEPS = 300
+
 
     // ============================================================== frag racks
 
@@ -245,7 +261,7 @@ object StoreDisplays {
 
     /**
      * Colonies of [speciesId] at [spots]: the species' anchored model moved to each spot (a copy, as the stocking tool
-     * makes). The move is measured from the anchor as modelled ([RockData.restAnchors]): a display tank's own
+     * makes). The move is measured from the anchor as modelled ([com.reeflive.core.sim.RockData.restAnchors]): a display tank's own
      * rockwork replaced the rock the anchors were on, and the renderer cuts the copy out of the model around that
      * spot.
      */
@@ -262,25 +278,5 @@ object StoreDisplays {
             sim.corals += Coral("$speciesId#shop$n", sp, name, rest?.name ?: "", p, Vec3.Y, sim.rng.nextDouble() * 6.28, p - homePos)
         }
         return spots.size
-    }
-
-    /**
-     * A display tank's sim for [tank]: its kind's glass, its rock, its light, the decor corals and today's animals.
-     * [addStock] puts the store's animals in (StoreVisit.build); decor goes in after so the stock gets the best spots.
-     */
-    fun build(tank: DisplayTank, species: SpeciesCatalog, rock: RockData, seed: Long, addStock: (Simulation, BooleanArray?) -> Unit): Simulation {
-        val s = tank.setup
-        val sim = CustomTank.fresh(s.kind.build, species, rock, 12 * 3600.0, seed)
-        buildScape(sim, s, seed.toInt())
-        for (c in 0 until min(s.light.gains.size, sim.lights.gains.size)) sim.lights.gains[c] = s.light.gains[c]
-        val used = if (s.scape == DisplayScape.RACKS) BooleanArray(plugs.size) else null
-        addStock(sim, used)
-        val forSale = tank.items.map { it.listing.speciesId }.toSet()
-        val rng = sim.rng.fork(91)
-        for (id in s.decor) {
-            if (id in forSale) continue
-            if (used != null) onPlugs(sim, id, 2, used, rng) else onRock(sim, id, 1)
-        }
-        return sim
     }
 }
