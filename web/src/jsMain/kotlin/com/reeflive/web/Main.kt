@@ -738,6 +738,8 @@ object ReefLive {
             obj { it.id = a.id; it.name = a.nickname; it.species = a.species.common; it.health = a.health }
         }.toTypedArray()
         o.events = snap.events.takeLast(3).map { it.toString() }.toTypedArray()
+        // per-surface algae cover the renderer draws (group-major: glass, sand, rock top, rock shade per group)
+        o.algaeCover = snap.algae.cover.map { kotlin.math.round(it * 1000f) / 1000f }.toTypedArray()
         return JSON.stringify(o)
     }
 

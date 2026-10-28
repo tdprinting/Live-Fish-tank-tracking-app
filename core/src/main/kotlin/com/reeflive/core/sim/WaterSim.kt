@@ -614,14 +614,14 @@ class WaterSim(val config: TankConfig, initial: WaterState = WaterState()) {
             "sr" -> s.sr = value
             "i" -> s.i = value
             "copper", "cu" -> s.copper = value
-            // algae covers: AlgaeModel re-seeds the group's biomass from the new value on its next step
-            "algae", "algaehair" -> s.algaeHair = value.coerceIn(0.0, 1.0)
-            "cyano" -> s.cyano = value.coerceIn(0.0, 1.0)
-            "diatoms" -> s.diatoms = value.coerceIn(0.0, 1.0)
-            "dinos" -> s.dinos = value.coerceIn(0.0, 1.0)
-            "film" -> s.film = value.coerceIn(0.0, 1.0)
-            "bubble" -> s.bubble = value.coerceIn(0.0, 1.0)
-            "coralline" -> s.coralline = value.coerceIn(0.0, 1.0)
+            // algae covers: AlgaeModel re-seeds the group's biomass from the new value now (shown from the next snapshot)
+            "algae", "algaehair" -> { s.algaeHair = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "cyano" -> { s.cyano = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "diatoms" -> { s.diatoms = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "dinos" -> { s.dinos = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "film" -> { s.film = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "bubble" -> { s.bubble = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
+            "coralline" -> { s.coralline = value.coerceIn(0.0, 1.0); algae.syncNow(s) }
             "silicate", "si" -> s.silicate = max(0.0, value)
             // microbial diversity 0..1 (young or knocked-back community: the dino gate, research 09 A2)
             "microbes" -> s.microbes = value.coerceIn(0.0, 1.0)
