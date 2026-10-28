@@ -62,9 +62,9 @@ export function initBags(opts) {
   host.appendChild(panel);
   panelText = panel.querySelector('#bagPanelText'); hurryBtn = panel.querySelector('#bagHurry');
   setInterval(tickBags, 250);
-  hurryBtn.addEventListener('click', () => {
+  hurryBtn.addEventListener('click', async () => {
     const on = !lastHurry;
-    if (SB.act('hurryBags', null, on ? 1 : 0)) { lastHurry = on; cue('TICK'); say(on ? 'Zoom! Time flies until the bags open.' : 'Back to your speed.'); tickBags(); }
+    if (await SB.act('hurryBags', null, on ? 1 : 0)) { lastHurry = on; cue('TICK'); say(on ? 'Zoom! Time flies until the bags open.' : 'Back to your speed.'); tickBags(); }
   });
 }
 
@@ -90,7 +90,7 @@ export function pickBag(stock, count, size) {
   const local = (e) => { const r = host.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const move = (e) => { if (!down) return; const [x, y] = local(e); place(x, y - lift); };
   catcher.addEventListener('pointermove', move);
-  catcher.addEventListener('pointerup', (e) => {
+  catcher.addEventListener('pointerup', async (e) => {
     if (!down) return;
     down = false;
     const [x, y] = local(e);
@@ -106,7 +106,7 @@ export function pickBag(stock, count, size) {
     }
     const h = held;
     drop();
-    if (SB.act('bag', `${h.id}:${h.size}:${gx.toFixed(1)}`, h.count)) {
+    if (await SB.act('bag', `${h.id}:${h.size}:${gx.toFixed(1)}`, h.count)) {
       cue('FEED');
       say(`Plop! ${h.count === 1 ? `The ${h.name}` : `${h.count} ${h.name}`} float in the bag so the water inside warms up. Out in 30 minutes, or tap Hurry up.`);
       setTimeout(tickBags, 200);

@@ -39,9 +39,9 @@ export function initCare({ my, isMine, say, cue, host }) {
   away.id = 'awayModal';
   document.body.appendChild(away);
   let awayLoop = false;
-  function awayFrame() {
+  async function awayFrame() {
     let a = null;
-    try { a = JSON.parse(my.away()); } catch { a = null; }
+    try { a = JSON.parse(await my.away()); } catch { a = null; }
     if (!a || !isMine()) { away.classList.add('hidden'); awayLoop = false; return; }
     away.classList.remove('hidden');
     const f = a.daysDone - Math.floor(a.daysDone), day = f < 0.5, k = day ? f / 0.5 : (f - 0.5) / 0.5;
@@ -65,11 +65,15 @@ export function initCare({ my, isMine, say, cue, host }) {
     });
   }
 
-  function poll() {
+  // one poll at a time: the economy answer hands out the sand dollars earned since the last one
+  let polling = null;
+  function poll() { return (polling ??= pollNow().catch((e) => console.error(e)).finally(() => { polling = null; })); }
+  async function pollNow() {
     if (!isMine()) { chip.classList.add('hidden'); if (open) close(); return; }
-    if (!awayLoop && away.classList.contains('hidden') && my.away() !== 'null') { awayLoop = true; requestAnimationFrame(awayFrame); }
+    if (!awayLoop && away.classList.contains('hidden') && (await my.away()) !== 'null') { awayLoop = true; requestAnimationFrame(awayFrame); }
     let v = null;
-    try { v = JSON.parse(my.economy()); } catch { v = null; }
+    try { v = JSON.parse(await my.economy()); } catch { v = null; }
+    if (!isMine()) return;
     if (!v) { chip.classList.add('hidden'); return; }
     let delay = 0;
     for (const g of v.gains || []) {
@@ -116,7 +120,7 @@ export function initCare({ my, isMine, say, cue, host }) {
     </div>`;
     modal.querySelector('#careClose').addEventListener('click', () => { cue?.('TICK'); close(); });
     modal.querySelectorAll('.jm.found').forEach((el) => el.addEventListener('click', () => { cue?.('TICK'); el.classList.toggle('open'); }));
-    modal.querySelector('#careCollect')?.addEventListener('click', () => { cue?.('TICK'); my.collectHappy(); poll(); render(); });
+    modal.querySelector('#careCollect')?.addEventListener('click', async () => { cue?.('TICK'); await my.collectHappy(); await poll(); render(); });
   }
 
   /** The reef journal: moments found (tap one to read its fact again; the rest are "???" with a hint) and animals kept. */

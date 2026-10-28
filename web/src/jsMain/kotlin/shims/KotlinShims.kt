@@ -74,7 +74,7 @@ class Thread(private val body: Runnable? = null, val name: String = "") {
     var priority = NORM_PRIORITY
     var isDaemon = false
     val contextClassLoader: ClassLoader = ClassLoader()
-    fun start() { body?.let { b -> kotlinx.browser.window.setTimeout({ b.run() }, 0) } }
+    fun start() { body?.let { b -> js("globalThis").setTimeout({ b.run() }, 0) } }
     companion object {
         const val NORM_PRIORITY = 5
         private val main = Thread()
@@ -83,8 +83,9 @@ class Thread(private val body: Runnable? = null, val name: String = "") {
 }
 
 object System {
-    private val t0 = kotlinx.browser.window.performance.now()
-    fun nanoTime(): Long = ((kotlinx.browser.window.performance.now() - t0) * 1e6).toLong()
+    // globalThis, not window: the sim also runs in a Web Worker
+    private val t0 = (js("globalThis").performance.now() as Double)
+    fun nanoTime(): Long = (((js("globalThis").performance.now() as Double) - t0) * 1e6).toLong()
     fun currentTimeMillis(): Long = kotlin.js.Date.now().toLong()
     fun arraycopy(src: Any, srcPos: Int, dst: Any, dstPos: Int, len: Int) {
         val s: dynamic = src; val d: dynamic = dst

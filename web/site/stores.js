@@ -18,10 +18,10 @@ const talk = { layer: null, els: [], raf: 0 };
 // the tanks beside the one you are at. Background slices skip frames that already run long.
 const LAST = 'reeflive.laststore';
 const warm = { raf: 0, last: 0 };
-function warmLoop(t) {
-  warm.raf = 0;
-  if (!my) return;
-  const waiting = pending != null;
+async function warmLoop(t) {
+  warm.raf = -1;   // running (the sim answers asynchronously): startWarm leaves it be
+  if (!my) { warm.raf = 0; return; }
+  const waiting = pending;
   const gap = t - warm.last;
   warm.last = t;
   let more = false;
@@ -29,18 +29,21 @@ function warmLoop(t) {
     // someone waiting at the door gets most of the frame; background work only on frames that are not already slow
     // (40 ms: a device held at 30 fps still warms the next tank)
     if (waiting) {
-      if (my.visitReady(9)) { const d = pending.d; pending = null; arrive(d); }
+      if (await my.visitReady(9)) {
+        // walked in; unless the keeper turned back meanwhile
+        if (pending === waiting) { pending = null; arrive(waiting.d); } else my.leaveStore();
+      }
       more = true;
-    } else if (gap < 40) more = my.buildStep(4); else more = my.building();
-  } catch (e) { console.error(e); more = false; if (waiting) abandon('The store is closed right now. Try again in a moment.'); }
-  if (more || pending) warm.raf = requestAnimationFrame(warmLoop);
+    } else if (gap < 40) more = await my.buildStep(4); else more = await my.building();
+  } catch (e) { console.error(e); more = false; if (waiting && pending === waiting) abandon('The store is closed right now. Try again in a moment.'); }
+  warm.raf = more || pending ? requestAnimationFrame(warmLoop) : 0;
 }
 function startWarm() { if (!warm.raf && my) warm.raf = requestAnimationFrame(warmLoop); }
 
 /** The street for My tank's "Shop" card: one storefront per store, locked ones dark with their level. */
 export function streetHtml() {
   let s = null;
-  try { s = JSON.parse(my.stores()); } catch { s = null; }
+  try { s = JSON.parse(my.peek.stores()); } catch { s = null; }
   if (!s) return '';
   try {
     // the store you went to last first, then the others that are open
@@ -67,10 +70,12 @@ export function initStores(opts) {
   return { enter, active: () => data != null || pending != null, pick, leave, walk: (i) => go(i), counter: () => openCounter(), trade: showTrade };
 }
 
-function enter(id) {
-  if (data || pending) return;
+let entering = false;
+async function enter(id) {
+  if (data || pending || entering) return;
   let d = null;
-  try { d = JSON.parse(my.visit(id)); } catch { d = null; }
+  entering = true;
+  try { d = JSON.parse(await my.visit(id)); } catch { d = null; } finally { entering = false; }
   if (!d) { say?.('That store is not open for you yet. Do your care jobs to level up!'); return; }
   try { localStorage.setItem(LAST, id); } catch { /* private mode */ }
   cue?.('TICK');
@@ -130,9 +135,10 @@ function stopTalk() {
 }
 
 /** A store regular walked up with a swap (core StoreTrades): the trade card. */
-function showTrade() {
+async function showTrade() {
   if (!data) return;
-  try { offer = JSON.parse(my.trade()); } catch { offer = null; }
+  try { offer = JSON.parse(await my.trade()); } catch { offer = null; }
+  if (!data) return;
   if (!offer) return;
   cue?.('TICK');
   render();
@@ -186,7 +192,7 @@ function leave(quiet) {
   onLeave();
 }
 
-function refresh() { try { const d = JSON.parse(my.visitItems()); if (d) data = d; } catch { /* keep */ } }
+async function refresh() { try { const d = JSON.parse(await my.visitItems()); if (d && data) data = d; } catch { /* keep */ } }
 
 function go(i) {
   if (!data) return;
@@ -197,19 +203,19 @@ function go(i) {
   render();
   // a tank that is not built yet (the row is built ahead as you walk along it) comes in a moment
   const want = at;
-  const show = () => {
+  const show = async () => {
     if (!data || want !== at) return;
     let ok = false;
-    try { ok = my.showTank(want); } catch (e) { console.error(e); ok = true; }
+    try { ok = await my.showTank(want); } catch (e) { console.error(e); ok = true; }
     if (!ok) { startWarm(); requestAnimationFrame(show); } else startWarm();
   };
   show();
 }
 
 /** An animal tapped in the display tank: its card. */
-function pick(id) {
+async function pick(id) {
   if (!data || !id) return;
-  const sp = my.displaySpecies(id);
+  const sp = await my.displaySpecies(id);
   if (sp) { picked = sp; render(); }
 }
 
@@ -234,21 +240,24 @@ function add(id) {
 
 function remove(id) { const k = bag.lastIndexOf(id); if (k >= 0) bag.splice(k, 1); render(); }
 
-function pay() {
+let paying = false;
+async function pay() {
+  if (paying) return;
   let r = null;
-  try { r = JSON.parse(my.checkout(JSON.stringify(bag))); } catch { r = null; }
+  paying = true;
+  try { r = JSON.parse(await my.checkout(JSON.stringify(bag))); } catch { r = null; } finally { paying = false; }
   if (!r) return;
   if (r.result !== 'OK') {
     const why = { TOO_POOR: 'Not enough sand dollars yet.', SOLD_OUT: 'Someone bought the last one!', LEVEL_LOCKED: 'That one needs a higher level.' };
     say?.(why[r.result] || 'The till got stuck. Try again.');
-    refresh(); render();
+    await refresh(); render();
     return;
   }
   payFx(r.total);
   if (!r.animals) {
     // only supplies: they are on the shelf at home now, and the keeper keeps shopping
     bag = [];
-    refresh(); render();
+    await refresh(); render();
     cue?.('TICK');
     say?.(`Paid ${r.total}! Your supplies are waiting on the shelf at home.`);
     return;
@@ -365,7 +374,7 @@ function supplyShelf() {
 /** The Sell sheet (docs/ECONOMY.md §6): the store's offer for each of your animals, wanted ones first. */
 function sellSheet() {
   let list = [];
-  try { list = JSON.parse(my.offers()); } catch { list = []; }
+  try { list = JSON.parse(my.peek.offers()) || []; } catch { list = []; }
   const rows = list.map((o) => {
     const why = o.tooSmallCm ? `Too little: grows to ${o.tooSmallCm.toFixed(1)} cm (now ${o.cm.toFixed(1)})` : o.amount ? '' : 'This store does not buy these';
     return `<div class="crow">${pic({ id: o.speciesId, group: o.group })}<span class="nm">${esc(o.name)}${o.wanted ? ' <i class="rib want">Wanted</i>' : ''}${why ? `<br><small class="muted">${why}</small>` : ''}</span>
@@ -378,10 +387,11 @@ function sellSheet() {
     <div class="carefoot"><button class="pill" data-ssellclose>Done</button></div></div></div>`;
 }
 
-function sell(id, pet) {
+async function sell(id, pet) {
   if (pet && !confirm(`Say goodbye to ${pet}?`)) return;
-  const paid = my.sell(id);
-  if (paid > 0) { cue?.('TICK'); say?.(`Sold for ${paid} sand dollars! The store will take good care of it.`); refresh(); }
+  const paid = await my.sell(id);
+  if (paid > 0) { cue?.('TICK'); say?.(`Sold for ${paid} sand dollars! The store will take good care of it.`); await refresh(); }
+  await my.offers();
   render();
 }
 
@@ -392,7 +402,7 @@ function onClick(e) {
   if (!b) return;
   const d = b.dataset;
   if (d.ssellid) sell(d.ssellid, d.spet);
-  else if ('ssell' in d) { sellOpen = true; cue?.('TICK'); render(); }
+  else if ('ssell' in d) { sellOpen = true; cue?.('TICK'); my.offers().then(render, render); }
   else if ('ssellclose' in d || ('ssellbg' in d && e.target === b)) { sellOpen = false; render(); }
   else if ('sleave' in d) leave();
   else if (d.stank != null) go(Number(d.stank));

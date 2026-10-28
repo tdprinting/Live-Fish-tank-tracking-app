@@ -6,14 +6,14 @@
 // the same state: musicSync hands it over, and its taps come back through radioOffer, radioStep, radioToggle and
 // radioVolume.
 let R = null;          // { songs:[{file,title,blurb,price,art}], gain, tuneGain, tune }
-let opts = null;       // { SB, live, store, ctx(), say, records() → bought files in My tank, buy(file) → bool, coins() → number|null, changed() }
+let opts = null;       // { SB, live, store, ctx(), say, records() → bought files in My tank, buy(file) → Promise<bool>, coins() → number|null, changed() }
 let el = null, gain = null, tuneBuf = null, playing = -1;
 let offer = -1;        // a locked record pulled out on the 3D stand, waiting for Buy
 const st = { on: true, track: 0, volume: 0.6 };
 
-export function initRadio(o) {
+export async function initRadio(o) {
   opts = o;
-  R = JSON.parse(o.SB.radio());
+  R = JSON.parse(await o.SB.radio());
   st.on = o.store.get('reeflive.radio', true);
   st.volume = o.store.get('reeflive.radioVolume', 0.6);
   st.track = playableOr(o.store.get('reeflive.radioTrack', 0));
@@ -50,7 +50,7 @@ export function radioVolume(v, done = true) {
 }
 
 /** A record on the shelf was tapped: play it if it is ours, else try to buy it. [quiet]: the music corner's bar says it. */
-export function radioPick(i, quiet = false) {
+export async function radioPick(i, quiet = false) {
   const s = R.songs[i];
   offer = -1;
   if (playable(s)) {
@@ -60,7 +60,7 @@ export function radioPick(i, quiet = false) {
     return;
   }
   if (opts.coins() == null) { opts.say(`${s.title} is in the record shop. Buy it in My tank for ${s.price} sand dollars.`); return; }
-  if (!opts.buy(s.file)) { opts.say(`Not enough sand dollars: ${s.title} costs ${s.price}. Do today's care jobs to earn more!`); return; }
+  if (!(await opts.buy(s.file))) { opts.say(`Not enough sand dollars: ${s.title} costs ${s.price}. Do today's care jobs to earn more!`); return; }
   remember([s.file]);
   st.on = true; opts.store.set('reeflive.radio', true);
   setTrack(i); tuneStatic();

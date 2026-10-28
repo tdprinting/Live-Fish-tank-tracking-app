@@ -139,7 +139,7 @@ float gspEdge(vec3 op, float r) {
     return r + min(r * 0.15, 1.4) * lobes + min(r * 0.35, 2.4) * run;
 }
 
-float algaeDensity(float cover) { return mix(0.45, 0.92, smoothstep(0.0, 0.5, cover)); }
+float algaeDensity(float cover) { return mix(0.4, 0.75, smoothstep(0.0, 0.5, cover)); }
 
 // Length of the segment a->b that lies inside the water volume (box 0..tank, below the surface).
 float waterPath(vec3 a, vec3 b) {

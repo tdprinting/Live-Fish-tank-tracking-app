@@ -10,7 +10,6 @@ import com.reeflive.core.custom.CustomTankSave
 import com.reeflive.core.sim.Stocking
 import com.reeflive.core.custom.TankBuilds
 import com.reeflive.core.custom.economy.BuyResult
-import com.reeflive.app.render.DryRockMesh
 import com.reeflive.core.custom.economy.DisplayBuild
 import com.reeflive.core.sim.BuiltRock
 import com.reeflive.core.custom.economy.DisplayTank
@@ -31,7 +30,6 @@ import com.reeflive.core.live.FastForward
 import com.reeflive.core.sim.Command
 import com.reeflive.core.sim.LifePace
 import com.reeflive.core.sim.Simulation
-import kotlinx.browser.localStorage
 import kotlin.math.roundToInt
 
 /**
@@ -58,8 +56,8 @@ object ReefMyTank {
     private var previewKey: String? = null
 
     private fun now(): Double = js("Date.now()") as Double
-    private fun read(key: String): String? = runCatching { localStorage.getItem(key) }.getOrNull()?.takeIf { it.isNotBlank() }
-    private fun write(key: String, v: String) { runCatching { localStorage.setItem(key, v) } }
+    private fun read(key: String): String? = ReefSim.store.read(key)?.takeIf { it.isNotBlank() }
+    private fun write(key: String, v: String) = ReefSim.store.write(key, v)
 
     /** `{exists, name, buildId, build, gallons}` for the page. */
     fun info(): String {
@@ -84,8 +82,8 @@ object ReefMyTank {
 
     /** Sets up a new, empty tank in build [buildId] and shows it when the page is in My tank. */
     fun start(buildId: String): Boolean {
-        val species = ReefLive.species ?: return false
-        val rock = ReefLive.rock ?: return false
+        val species = ReefSim.species ?: return false
+        val rock = ReefSim.rock ?: return false
         val build = TankBuilds.byId(buildId)
         val t = now()
         val secOfDay = js("(function(){var d=new Date();return d.getHours()*3600+d.getMinutes()*60+d.getSeconds();})()") as Int
@@ -104,7 +102,7 @@ object ReefMyTank {
         loaded = true
         save()
         showRoom()
-        if (ReefSandbox.isMine()) ReefLive.sim = s
+        if (ReefSandbox.isMine()) ReefSim.sim = s
         return true
     }
 
@@ -113,9 +111,9 @@ object ReefMyTank {
         read(KEY)?.let { write(BACKUP, it) }
         // one of several tanks: it goes and the next one round comes into view
         captureNow()?.let { RoomTanks.dropActive(it) }?.let { if (open(it)) return }
-        runCatching { localStorage.removeItem(KEY) }
+        ReefSim.store.remove(KEY)
         sim = null; base = null; loaded = true; awayRun = null; awaySummary = null
-        if (ReefSandbox.isMine()) ReefLive.sim = null
+        if (ReefSandbox.isMine()) ReefSim.sim = null
     }
 
     /** Names an animal; it is kept in the next save. */
@@ -213,7 +211,7 @@ object ReefMyTank {
     /** Puts My tank's stand and room (or the one being tried on) round the tank. */
     private fun showRoom() {
         val k = previewKey
-        ReefLive.homeRoom.look = RoomLook.of(if (k != null) Decor.preview(decor, k) else decor, base?.side ?: 0)
+        ReefSim.fx.homeLook(RoomLook.of(if (k != null) Decor.preview(decor, k) else decor, base?.side ?: 0))
     }
 
     /**
@@ -282,8 +280,8 @@ object ReefMyTank {
 
     /** Opens [save] as the tank in view (another wall's tank): its time away runs on, as when the page reopens. */
     private fun open(save: CustomTankSave): Boolean {
-        val species = ReefLive.species ?: return false
-        val rock = ReefLive.rock ?: return false
+        val species = ReefSim.species ?: return false
+        val rock = ReefSim.rock ?: return false
         val s = runCatching { CustomTank.restore(save, species, rock) }.getOrNull() ?: return false
         s.stepWall(0.0)
         sim = s
@@ -294,7 +292,7 @@ object ReefMyTank {
         awayRun = null; awaySummary = null
         write(KEY, CustomTankCodec.encode(save))
         pausedAt = save.savedAtMs.toDouble()
-        if (ReefSandbox.isMine()) { ReefLive.sim = s; catchUp() }
+        if (ReefSandbox.isMine()) { ReefSim.sim = s; catchUp() }
         showRoom()
         return true
     }
@@ -361,8 +359,8 @@ object ReefMyTank {
         if (built.containsKey(key)) return
         val queued = jobs.indexOfFirst { it.key == key }
         if (queued >= 0) { if (first && queued > 0) jobs.add(0, jobs.removeAt(queued)); return }
-        val species = ReefLive.species ?: return
-        val rock = ReefLive.rock ?: return
+        val species = ReefSim.species ?: return
+        val rock = ReefSim.rock ?: return
         val job = Job(key, DisplayBuild(tank, species, rock, seedFor(day, i)))
         if (first) jobs.add(0, job) else jobs.add(job)
     }
@@ -382,7 +380,7 @@ object ReefMyTank {
         }
         val q = job.rocks
         if (ready && q != null) {
-            while (q.isNotEmpty() && t0.elapsedNow().inWholeMicroseconds < budgetMs * 1000.0) { val r = q.removeFirst(); DryRockMesh.cached(r.shape, r.seed) }
+            while (q.isNotEmpty() && t0.elapsedNow().inWholeMicroseconds < budgetMs * 1000.0) { val r = q.removeFirst(); ReefSim.fx.meshRock(r) }
             if (q.isEmpty()) {
                 jobs.removeAt(0)
                 built[job.key] = job.build.sim!!
@@ -455,8 +453,7 @@ object ReefMyTank {
         showTank(0)
         swap = StoreTrades.offer(store, mine, e, today())
         // walk in from the street, unless the page asks for less motion
-        ReefLive.room.walkIn = !kotlinx.browser.window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ReefLive.room.enter(store.id, tanks.size, 0, tanks.map { it.setup }, swap?.line)
+        ReefSim.fx.storeEnter(store.id, tanks.size, 0, tanks.map { it.setup }, swap?.line, walkIn = !ReefSim.reducedMotion)
         return true
     }
 
@@ -503,8 +500,8 @@ object ReefMyTank {
         val d = built[tankKey(store, day, i)]
         if (d == null) { want(store, day, tanks, i, first = true); return false }
         display = d; tankAt = i
-        if (ReefSandbox.isMine()) ReefLive.sim = d
-        ReefLive.room.show(i)
+        if (ReefSandbox.isMine()) ReefSim.sim = d
+        ReefSim.fx.storeShow(i)
         // the neighbours next, so walking along the row does not wait
         want(store, day, tanks, i + 1, first = false)
         want(store, day, tanks, i - 1, first = false)
@@ -512,7 +509,7 @@ object ReefMyTank {
     }
 
     /** Walks to the checkout counter in 3D ([on]) or back to the tank. */
-    fun storeCounter(on: Boolean) { if (visiting != null) ReefLive.room.counter(on) }
+    fun storeCounter(on: Boolean) { if (visiting != null) ReefSim.fx.storeCounter(on) }
 
     /** The species id of an animal tapped in the display tank (its card), or "". */
     fun displaySpecies(id: String): String =
@@ -545,30 +542,8 @@ object ReefMyTank {
         return JSON.stringify(obj { it.result = c.result.name; it.total = c.total; it.coins = e.state.coins; it.animals = c.bought.size; it.supplies = c.supplies.values.sum() })
     }
 
-    // ---- the store's people (render StorePeople): their speech bubbles and a regular's swap
+    // ---- a store regular's swap (their speech bubbles are the view's: ReefLive.storeBubbles)
     private var swap: TradeOffer? = null
-    private val bText = arrayOfNulls<String>(6)
-    private val bPos = FloatArray(18)
-    private val bAlpha = FloatArray(6)
-    private val bPt = FloatArray(3)
-
-    /**
-     * What the store's people are saying now, as JSON [{text, x, y, a}] with x, y in canvas pixels just over the
-     * talker's head (as Android's StoreBubbleLayer). The page calls it every animation frame in a store.
-     */
-    fun storeBubbles(): String {
-        if (visiting == null) return "[]"
-        val r = ReefLive.renderer ?: return "[]"
-        val proj = r.projection ?: com.reeflive.app.render.TankProjection().also { r.projection = it }
-        val n = ReefLive.room.bubbles(bText, bPos, bAlpha)
-        val out = ArrayList<dynamic>()
-        for (i in 0 until n) {
-            val t = bText[i] ?: continue
-            if (!proj.project(bPos[i * 3], bPos[i * 3 + 1], bPos[i * 3 + 2], bPt)) continue
-            out.add(obj { o -> o.text = t; o.x = bPt[0]; o.y = bPt[1]; o.a = bAlpha[i] })
-        }
-        return JSON.stringify(out.toTypedArray())
-    }
 
     /** The swap the store's regular just asked about: {trader, line, give, frag, get} or "null". */
     fun trade(): String {
@@ -580,7 +555,7 @@ object ReefMyTank {
     fun answerTrade(yes: Boolean) {
         val o = swap ?: return
         swap = null
-        ReefLive.room.tradeReply(yes)
+        ReefSim.fx.storeTradeReply(yes)
         if (!yes) return
         val mine = sim ?: return
         val e = economy ?: return
@@ -594,8 +569,8 @@ object ReefMyTank {
     fun leaveStore() {
         if (visiting == null) { visitCancel(); return }
         visiting = null; plan = null; tanks = emptyList(); tankAt = -1; display = null; swap = null
-        ReefLive.room.leave()
-        if (ReefSandbox.isMine()) { ReefLive.sim = sim; catchUp() }
+        ReefSim.fx.storeLeave()
+        if (ReefSandbox.isMine()) { ReefSim.sim = sim; catchUp() }
     }
 
     fun inStore(): Boolean = visiting != null
@@ -655,9 +630,9 @@ object ReefMyTank {
 
     internal fun leave() {
         previewKey = null
-        ReefLive.homeRoom.look = RoomLook.DEFAULT
+        ReefSim.fx.homeLook(RoomLook.DEFAULT)
         // walking out of My tank from a store: the pause already started at the store's door
-        if (visiting != null) { visiting = null; plan = null; tanks = emptyList(); tankAt = -1; display = null; ReefLive.room.leave(); return }
+        if (visiting != null) { visiting = null; plan = null; tanks = emptyList(); tankAt = -1; display = null; ReefSim.fx.storeLeave(); return }
         save(); pausedAt = now()
     }
 
@@ -702,8 +677,8 @@ object ReefMyTank {
 
     private fun load() {
         if (loaded) return
-        val species = ReefLive.species ?: return
-        val rock = ReefLive.rock ?: return
+        val species = ReefSim.species ?: return
+        val rock = ReefSim.rock ?: return
         loaded = true
         // a damaged save falls back to the one before it; no save at all (never set up, or started over) is no tank
         val text = read(KEY) ?: return

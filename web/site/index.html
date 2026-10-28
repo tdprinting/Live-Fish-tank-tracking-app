@@ -15,8 +15,79 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap">
+<!-- the font's stylesheet must not hold up the app (scripts wait for blocking stylesheets); display=swap as before -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="style.css">
+<!--modulepreload-->
+<script>
+// Starts the first view's downloads while the app's code downloads and starts up (Main.kt fetchFile takes them from
+// here). Models and the rock field also ship gzipped (.gz, web/build.gradle.kts): GitHub Pages sends .glb as is,
+// and they shrink about 2x.
+(() => {
+  const gz = typeof DecompressionStream === 'function';
+  async function get(p, signal, priority) {
+    if (gz && /\.(glb|bin)$/.test(p)) {
+      try {
+        const r = await fetch(`${p}.gz`, { signal, priority });
+        if (r.ok) {
+          const b = await r.arrayBuffer();
+          const h = new Uint8Array(b, 0, Math.min(2, b.byteLength));
+          // a server that marks .gz as Content-Encoding hands it over unpacked already
+          if (h[0] !== 0x1f || h[1] !== 0x8b) return b;
+          return await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        }
+      } catch (e) { if (signal && signal.aborted) throw e; }
+    }
+    const r = await fetch(p, { signal, priority });
+    return r.ok ? r.arrayBuffer() : null;
+  }
+  const pre = new Map();
+  const asked = [];
+  // the file's bytes (an ArrayBuffer), or null when it is missing
+  window.reefFetch = (p, signal) => {
+    if (asked.length < 60 && !asked.includes(p)) asked.push(p);
+    const q = pre.get(p);
+    if (!q) return get(p, signal);
+    pre.delete(p);
+    const got = q.then((b) => b || get(p, signal));
+    // a stalled download is cut off by the caller's timeout (Main.kt fetchWithRetry) and retried afresh
+    return signal ? Promise.race([got, new Promise((_, no) => signal.addEventListener('abort', () => no(new Error('timed out'))))]) : got;
+  };
+  const read = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+  // the preset the tank starts on (live.js pictureArg) picks the rock's level of detail
+  let q = read('reeflive.picture', 'AUTO');
+  if (q === 'AUTO') q = read('reeflive.autoLevel', null) || (matchMedia('(pointer: coarse)').matches ? 'MEDIUM' : 'HIGH');
+  const key = `reeflive.firstView.${q}`;
+  const m = (n) => `assets/models/${n}.glb`;
+  const t = (n) => `assets/textures/${n}`;
+  // what the tank asked for first on the last visit, else what a first visit asks for (Main.kt boot files,
+  // TankRenderer SCENE_MODELS and SHARED_TEXTURES, the room, the stand and the shelf)
+  const list = read(key, null) || ['boot.json', 'assets/sim/rock_sdf.bin', m('tank'), m('rockscape_lod1'),
+    m('equipment'), m('algae_tufts'), m('reef_details'), t('caustic_512.png'), t('irid_lut.png'), t('room_env.png'), t('water_n1.png'),
+    t('water_n2.png'), t('sand_normal.jpg'), m('supply_shelf'), m('room_living'), m('stand_classic'), m('care_tools'),
+    // High draws the LOD1 rock until the full one is in (AssetStore standIn)
+    ...(q === 'HIGH' ? [m('rockscape')] : [])];
+  // They start once app.js is in: the code comes first (it has seconds of starting up to do, which the downloads
+  // then overlap), whatever the server makes of request priorities.
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    const want = (p) => typeof p === 'string' && !asked.includes(p) && !pre.has(p);
+    const fetchAll = (ps, priority) => Promise.all(ps.filter(want).map((p) => { const q = get(p, undefined, priority).catch(() => null); pre.set(p, q); return q; }));
+    // what the overlay waits for (Main.kt start: boot pack, rock field) first, then what the first frames draw
+    const boot = list.filter((p) => !/^assets\/(models|textures)/.test(p));
+    fetchAll(boot, 'high').then(() => fetchAll(list, 'low'));
+  };
+  const isApp = (e) => new URL(e.name).pathname.endsWith('/app.js');
+  try {
+    new PerformanceObserver((l, o) => { if (l.getEntries().some(isApp)) { o.disconnect(); start(); } }).observe({ type: 'resource', buffered: true });
+  } catch { start(); }
+  setTimeout(start, 6000);
+  // what this visit asked for in its first seconds is the next visit's list
+  setTimeout(() => { if (asked.length > 3) try { localStorage.setItem(key, JSON.stringify(asked)); } catch { /* private mode */ } }, 20000);
+})();
+</script>
 </head>
 <body>
 <header class="bar">
@@ -214,6 +285,12 @@
 <div id="install" class="install glass hidden">
   <p>Add ReefLive to your Home Screen: tap <strong>Share</strong> then <strong>Add to Home Screen</strong>.</p>
   <button class="icon-btn" id="installClose" aria-label="Dismiss">✕</button>
+</div>
+
+<div id="update" class="update glass hidden" role="status">
+  <span>New version ready</span>
+  <button class="btn small" id="updateGo">Reload</button>
+  <button class="icon-btn" id="updateClose" aria-label="Later">✕</button>
 </div>
 
 <script type="module" src="app.js"></script>

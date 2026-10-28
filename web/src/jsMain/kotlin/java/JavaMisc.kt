@@ -35,7 +35,7 @@ private class BrowserExecutor : ExecutorService {
     override fun execute(r: Runnable) {
         val path = AssetPrefetch.takeLast()
         val run = { if (!down) r.run() }
-        if (path == null) kotlinx.browser.window.setTimeout(run, 0)
+        if (path == null) js("globalThis").setTimeout(run, 0)
         else AssetPrefetch.fetch(path) { run() }
     }
 }

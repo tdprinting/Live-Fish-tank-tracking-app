@@ -3,8 +3,9 @@ uniform sampler2D uCaustic;
 // Shadow depth map (ShadowMap.kt, unit 14), compared in hardware (bilinear PCF per tap).
 uniform highp sampler2DShadow uShadowMap;
 
-const vec3 HEMI_TOP = vec3(0.0103, 0.0356, 0.0823);    // #1A3550 linear
-const vec3 HEMI_BOTTOM = vec3(0.0019, 0.0052, 0.0116); // #06101C linear
+// neutral-warm sky / bounce: a blue hemisphere filled every shadow with cyan (research 11 §0)
+const vec3 HEMI_TOP = vec3(0.026, 0.033, 0.056);
+const vec3 HEMI_BOTTOM = vec3(0.004, 0.005, 0.007);
 const vec3 NIGHT_FLOOR = vec3(0.0025, 0.0045, 0.0095);
 
 // Radiance from AI Prime i at p (point light, cosine cone pointing down), attenuated through the water
@@ -99,9 +100,10 @@ vec3 causticColor(vec3 p, vec3 n, vec2 slope) {
     float chop = clamp(length(slope) * 5.0, 0.0, 1.5);
     // linear + squared: the squared term makes crisp bright lines up close, the linear term keeps the shimmer's energy
     // when the lines shrink below a pixel (far sand, small phone screens), where squaring a mip-blurred read fades out
-    vec3 c = min(sum * 8.0 + sum * sum * 24.0, vec3(4.0)) * (0.7 + 0.5 * chop);
-    // Medium/High: side faces keep ~40% of the shimmer (light arrives steeply but not only from straight above)
-    float side = uQuality >= 0.5 ? 0.42 : 0.2;
+    vec3 c = min(sum * 8.0 + sum * sum * 10.0, vec3(4.0)) * (0.7 + 0.5 * chop);
+    // Medium/High: side faces keep ~20% of the shimmer (light arrives steeply but not only from straight above; the
+    // photos show next to none on rock faces)
+    float side = uQuality >= 0.5 ? 0.22 : 0.2;
     float facing = clamp(n.y * (1.0 - side) + side, 0.0, 1.0);
     return c * lightTint() * (facing * lightIntensity() * exp(-0.010 * depth));
 }
@@ -168,7 +170,7 @@ float surfaceFlicker(vec3 p, vec2 slope) {
     if (uQuality < 0.5 || p.y > uWaterLevel) return 1.0;
     vec2 uv = (p.xz + slope * (uWaterLevel - p.y) * 0.6) * uCausticScale * 0.45;
     float f = texture(uCaustic, uv + uTime * vec2(0.017, -0.012), 3.5).r;
-    return 0.74 + 0.26 * clamp(f * 28.0, 0.0, 2.2);
+    return 0.85 + 0.15 * clamp(f * 28.0, 0.0, 2.2);
 }
 
 // Bump from a scalar height h (cm) via screen-space derivatives (surface gradient, no tangents). Callers keep it in
@@ -234,7 +236,7 @@ vec3 shadeLit(vec3 albedo, vec3 N, vec3 V, vec3 p, float rough, float ao, float 
     // which saves four heightfield reads and three waves per lit pixel
     vec2 slope = p.y > uWaterLevel || uQuality < 0.5 ? vec2(0.0) : surfaceSlope(p.xz) + swell(p.xz, 3).yz;
     // the rippled surface gathers the beam into the caustic net, so the light between the lines is dimmer
-    float gather = p.y < uWaterLevel ? 0.6 * uCausticStrength * max(N.y, 0.0) : 0.0;
+    float gather = p.y < uWaterLevel ? 0.4 * uCausticStrength * max(N.y, 0.0) : 0.0;
     direct *= surfaceFlicker(p, slope) * (1.0 - gather);
     direct += albedo * causticColor(p, N, slope) * uCausticStrength;
 #ifndef NO_CONTACT_SHADOW
@@ -257,13 +259,14 @@ vec3 applyWater(vec3 col, vec3 p) {
 // Filmic curve (Hejl-style x/(x+0.155)*1.019); it already includes the display gamma, so no extra pow.
 // Shared grade, so every shader lands in one look: partial white balance toward the fixture colour (the eye / a
 // camera adapts to the AI Prime mix, so cream rock reads cream under a blue-heavy daylight, while dusk keeps more blue
-// and moonlight stays blue), then a gentle S-curve and a touch of saturation. Actinic-only light (blue fraction near 1,
+// and moonlight stays blue), then a gentle S-curve; no global saturation boost (colour comes from the materials, research
+// 11 §6). The balance is near full (0.9), as a phone camera's is in Tee's photos. Actinic-only light (blue fraction near 1,
 // the Blue light look and blue-only ramps) is barely balanced: the real tank reads deep blue under it, with the
 // fluorescent corals glowing out of it, and more saturated.
 vec3 tonemap(vec3 x) {
     x = max(x, vec3(0.0));
     float actinic = (1.0 - uNight) * smoothstep(0.86, 0.98, uBlueFraction);
-    float wb = 0.6 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()) * (1.0 - 0.8 * actinic);
+    float wb = 0.9 * (1.0 - uNight) * smoothstep(0.03, 0.25, lightIntensity()) * (1.0 - 0.8 * actinic);
     vec3 adapt = mix(vec3(1.0), lightTint(), wb);
     x /= max(adapt, vec3(0.2));
     vec3 c = x / (x + 0.155) * 1.019;
@@ -271,5 +274,5 @@ vec3 tonemap(vec3 x) {
     c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     // actinic: the camera / eye sees royal blue as a deep, saturated indigo (Tee's video), not a pale sky blue
-    return clamp(mix(vec3(l), c, 1.06 + 0.5 * actinic), 0.0, 1.0);
+    return clamp(mix(vec3(l), c, 1.0 + 0.5 * actinic), 0.0, 1.0);
 }

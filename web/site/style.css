@@ -789,3 +789,9 @@ body.on-live .acclpill { bottom: auto; top: calc(var(--topH, 64px) + 8px); }
 .fixhint { font-size: 14px; background: rgba(255,255,255,.1); border-radius: 12px; padding: 8px 12px; margin: 10px 0 6px; }
 .photoview img { display: block; width: 100%; height: auto; border-radius: 14px; }
 @media (max-width: 380px) { .clock { font-size: 46px; } .bignum { font-size: 26px; } }
+
+/* "New version ready" prompt (app.js): clear of the bottom rail (about 108 dp tall on a phone), never over it; the page only reloads on the tap */
+.update { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--safe-bottom) + 132px); width: max-content; max-width: calc(100% - 24px); padding: 6px 8px 6px 14px; display: flex; gap: 10px; align-items: center; font-size: 14px; z-index: 40; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.update .btn { min-height: 44px; }
+.update .icon-btn { min-width: 44px; min-height: 44px; }
+.buildline { font-size: 11px; color: var(--kelp); margin: 10px 0 0; text-align: center; }

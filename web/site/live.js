@@ -1,7 +1,8 @@
 // ReefLive web: the live tank screen, mirroring the Android live screen (LiveTankScreen + LiveMenu + SupplyShelf +
-// MicroscopeView + TimelapseSheet). The sim, renderer and the shared tables come from Kotlin (kotlin/ReefLive-web.mjs):
-// ReefLive drives the 3D view, ReefSandbox is the Android view model's actions and readings.
-import { ReefLive, ReefSandbox, ReefMyTank } from './kotlin/ReefLive-web.mjs';
+// MicroscopeView + TimelapseSheet). The sim, renderer and the shared tables come from Kotlin (kotlin/ReefLive-web.mjs),
+// reached through SimHost (simhost.js): `live` drives the 3D view, `SB` is the Android view model's actions and readings,
+// `MY` is My tank. Calls that need the sim's answer return Promises (the sim may run in a worker).
+import { live, sb as SB, my as MY } from './simhost.js';
 import { initBags, pickBag } from './bags.js';
 import { initCorals } from './corals.js';
 import { GLYPHS } from './glyphs.js';
@@ -11,10 +12,6 @@ import { initStores, streetHtml } from './stores.js';
 import { initRoom, roomHtml, roomClick, endTry, roomNav } from './room.js';
 import { initRadio, musicBarHtml, musicSync, radioBuyOffer, radioDropOffer, radioKick, radioOffer, radioOn, radioPick, radioShelfHtml, radioSong, radioStep, radioToggle, radioVolume } from './radio.js';
 
-const live = ReefLive.getInstance();
-const SB = ReefSandbox.getInstance();
-const MY = ReefMyTank.getInstance();
-window.reeflive = live; window.reefsandbox = SB; // handy from the Safari console
 const $ = (id) => document.getElementById(id);
 const store = {
   get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
@@ -50,7 +47,8 @@ function statsBox() {
   if (!statsEl) {
     statsEl = document.createElement('pre');
     statsEl.style.cssText = 'position:fixed;left:8px;top:calc(env(safe-area-inset-top) + 8px);z-index:9999;margin:0;' +
-      'padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ef;font:11px/1.35 ui-monospace,monospace;pointer-events:none';
+      'padding:6px 8px;border-radius:8px;background:rgba(6,19,39,.62);border:1px solid var(--glassBorder);color:#E9F3FF;' +
+      'font:11px/1.35 ui-monospace,monospace;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none';
     document.body.appendChild(statsEl);
   }
   return statsEl;
@@ -109,16 +107,17 @@ export function startLive(applyReadings) {
     ...(new URLSearchParams(location.search).has('stats') ? { onStats: (t) => statsBox().textContent = t } : {}),
     // the aquascape builder added or took out a rock: keep the new rockwork
     onRockscape: (state) => store.set('reeflive.rocks', state),
-  }).then(() => {
+  }).then(async () => {
     live.restoreRocks(store.get('reeflive.rocks', ''));
     live.setDynamicRocks(ui.rocks);
-    C = JSON.parse(SB.catalog());
+    C = JSON.parse(await SB.catalog());
     initBags({ live, SB, say, cue, onCancel: () => { ui.card = 'LIFE'; renderAll(); } });
-    initRadio({
+    await initRadio({
       SB, live, store, ctx: audioCtx, say, changed: () => renderMusic(),
-      records: () => (ui.mode === 'mine' ? JSON.parse(MY.records()) : []),
-      buy: (file) => { const ok = ui.mode === 'mine' && MY.buyRecord(file); if (ok) MY.save(); return ok; },
-      coins: () => (ui.mode === 'mine' ? JSON.parse(MY.economy())?.coins ?? null : null),
+      records: () => (ui.mode === 'mine' ? JSON.parse(MY.peek.records() ?? '[]') : []),
+      buy: async (file) => { const ok = ui.mode === 'mine' && await MY.buyRecord(file); if (ok) MY.save(); return ok; },
+      // the Care card's last numbers (asking economy() here would take the sand dollars just earned off the Care card)
+      coins: () => (ui.mode === 'mine' ? JSON.parse(MY.peek.economy() ?? 'null')?.coins ?? null : null),
     });
     initCorals({ live, SB, say, cue, isMine: () => ui.mode === 'mine', onShow: () => { if (ui.card) closeCard(); } });
     $('loading').classList.add('done');
@@ -161,11 +160,21 @@ try { const top = document.querySelector('#live .top'), chrome = $('chrome');
   if (top && window.ResizeObserver) new ResizeObserver(() => chrome.style.setProperty('--topH', `${top.offsetHeight + 8}px`)).observe(top); } catch (e) { /* keep CSS fallback */ }
 
 // ================================================================ periodic refresh
+let ticking = null, tickAgain = false, lastSupplies = null;
+/** The 2 Hz refresh (and after each action): fresh numbers from the sim, then the HUD; calls while one runs merge into one more. */
 function tick() {
-  P = JSON.parse(SB.panel());
+  if (ticking) { tickAgain = true; return ticking; }
+  ticking = refresh().catch((e) => console.error(e)).finally(() => { ticking = null; if (tickAgain) { tickAgain = false; tick(); } });
+  return ticking;
+}
+async function refresh() {
+  const [panel, list, state, supplies] = await Promise.all([SB.panel(), SB.animals(), live.state(), ui.mode === 'mine' ? MY.supplies() : null]);
+  P = JSON.parse(panel);
   if (!P) return;
-  animals = JSON.parse(SB.animals());
-  const s = JSON.parse(live.state());
+  animals = JSON.parse(list);
+  // My tank's shelf: what was bought or used up elsewhere (a store, the fish food button) leaves or comes back
+  if (supplies !== lastSupplies) { const first = lastSupplies === null; lastSupplies = supplies; if (!first) stockChanged(); }
+  const s = JSON.parse(state);
   ui.clockAt = s;
   if (s) $('clock').textContent = `${PHASE_ICON[s.phase] ?? ''} ${hhmm(s.time)}${P.speed !== 1 ? ` · ${P.speed === 0 ? 'paused' : `${P.speed}×`}` : ''}`;
   ui.worst = P.readouts.some((r) => r.status === 'DANGER') ? 'danger' : P.readouts.some((r) => r.status === 'CAUTION') ? 'caution' : 'good';
@@ -235,8 +244,8 @@ function toast(text) {
 function locked() { say('That only works in My tank. Tap My tank at the top to try it.'); cue('TICK'); }
 
 /** Runs a ReefSandbox action; in Watch mode sandbox-only actions explain themselves instead. */
-function act(name, arg = null, num = 0, line = null) {
-  const ok = SB.act(name, arg, num);
+async function act(name, arg = null, num = 0, line = null) {
+  const ok = await SB.act(name, arg, num);
   if (!ok) { locked(); return false; }
   if (line) say(line);
   cue('TICK');
@@ -261,10 +270,10 @@ async function checkNews(firstVisit) {
   showFact();
 }
 /** No new updates: a reef fact or reef-keeping tip instead, a new one every time the app opens (core ReefFacts). */
-function showFact() {
+async function showFact() {
   const n = store.get('reeflive.factN', Math.floor(Math.random() * 1000));
   store.set('reeflive.factN', n + 1);
-  const f = JSON.parse(SB.fact(n));
+  const f = JSON.parse(await SB.fact(n));
   whenFree(() => {
     $('newsTitle').textContent = `🐠 ${f.title}`;
     $('newsList').innerHTML = `<li>${esc(f.text)}</li>`;
@@ -306,7 +315,7 @@ function showTips() {
 
 // ================================================================ mode
 document.querySelectorAll('.seg [data-mode]').forEach((b) => { b.insertAdjacentHTML('afterbegin', icon(b.dataset.ico)); b.addEventListener('click', () => setMode(b.dataset.mode)); });
-function setMode(m) {
+async function setMode(m) {
   if (m === ui.mode && !ui.watchFast) return;
   ui.watchFast = false;
   if (window.reefstores?.active()) window.reefstores.leave(true);
@@ -315,15 +324,18 @@ function setMode(m) {
   SB.setMode(m);
   ui.picked = null; ui.following = null; live.follow(null); renderFish();
   // My tank keeps the speed it was left at; the other two start at real time
-  if (m === 'mine') ui.speed = JSON.parse(SB.panel() ?? 'null')?.speed ?? 1;
-  else { ui.speed = 1; live.setSpeed(1); }
+  if (m !== 'mine') { ui.speed = 1; live.setSpeed(1); }
   live.shelfLocked(shelfLockIds());
   document.querySelectorAll('.seg [data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   closeCard();
   if (m === 'mine') {
-    const info = JSON.parse(MY.info());
-    if (!info.exists) showMyTankSetup();
-    else say(`${info.name}: your very own ${info.build}. Everything you do here is saved.`);
+    const [panel, info] = await Promise.all([SB.panel(), MY.info(), MY.records(), MY.supplies()]);
+    if (ui.mode !== m) return;   // switched again meanwhile
+    ui.speed = JSON.parse(panel ?? 'null')?.speed ?? 1;
+    const i = JSON.parse(info);
+    if (!i.exists) showMyTankSetup();
+    else say(`${i.name}: your very own ${i.build}. Everything you do here is saved.`);
+    stockChanged();
   } else {
     if ($('mytank').open) $('mytank').close();
     say('Back to your real tank. Just watch and feed.');
@@ -357,25 +369,25 @@ function tankSketch(b) {
   </svg>`;
 }
 
-function showMyTankSetup() {
-  const builds = JSON.parse(MY.builds());
+async function showMyTankSetup() {
+  const builds = JSON.parse(await MY.builds());
   $('mytankList').innerHTML = builds.map((b) => `<button class="opt build" data-build="${b.id}">${tankSketch(b)}<strong>${icon('tank')} ${esc(b.label)}</strong>
     <small>${b.gallons} gal · ${esc(b.size)}${b.rimless ? ' · rimless' : ''}</small><span>${esc(b.blurb)}</span></button>`).join('');
   const d = $('mytank');
   if (!d.open) d.showModal();
 }
-$('mytankList').addEventListener('click', (e) => {
+$('mytankList').addEventListener('click', async (e) => {
   const id = e.target.closest('[data-build]')?.dataset.build;
   if (!id) return;
   cue('TICK');
-  if (!MY.start(id)) return;
+  if (!(await MY.start(id))) return;
   $('mytank').close();
   // ask the browser to keep this site's storage (best effort; an installed home-screen app keeps it anyway)
   try { navigator.storage?.persist?.(); } catch { /* not offered */ }
   say('A brand new tank! Tap Shop to visit the fish stores and bring home your first animals.');
   ui.card = 'LIFE'; renderCard(); renderRail(); tick();
 });
-$('mytankClose').addEventListener('click', () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(MY.info()).exists) setMode('watch'); });
+$('mytankClose').addEventListener('click', async () => { $('mytank').close(); if (ui.mode === 'mine' && !JSON.parse(await MY.info()).exists) setMode('watch'); });
 // saved every 30 s while on screen, and whenever the page goes away
 setInterval(() => { if (ui.mode === 'mine') MY.save(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (document.hidden) MY.hidden(); else MY.visible(); });
@@ -440,10 +452,22 @@ const tile = (attrs, ico, label, on = false, lock = false, badge = '') =>
 const val = (id) => P?.values?.[id]?.v;
 const isOn = (id) => (val(id) ?? 0) >= 0.5;
 
-function renderCard() {
+/** What a card shows that is not in the 2 Hz panel: asked fresh before it is drawn (the builders read it back with peek). */
+function cardData(card) {
+  const mine = ui.mode === 'mine';
+  switch (card) {
+    case 'HEALTH': return Promise.all([SB.fixes(), SB.hunger(), SB.corals()]).then(([f, h, c]) => { ui.fixData = f; ui.hungerRows = JSON.parse(h); ui.coralCare = JSON.parse(c || '{}'); });
+    case 'LOOK': return mine ? MY.paces() : null;
+    case 'LIFE': return mine ? Promise.all([MY.stores(), MY.decorShop()]) : null;
+    default: return null;
+  }
+}
+async function renderCard() {
   if (!ui.card) return;
   // opening the tank check is testing the water (My tank's daily job)
   if (ui.card === 'FIX' || ui.card === 'HEALTH') MY.testedWater();
+  await cardData(ui.card);
+  if (!ui.card) return;
   const sb = editable();
   let h = '';
   switch (ui.card) {
@@ -458,7 +482,7 @@ function renderCard() {
     <span>${['LIFE', 'TANK'].includes(ui.card) ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
     <button class="icon-btn" data-close aria-label="Close">✕</button></span></div><div class="card-body">${h}</div>`;
   $('card').classList.remove('hidden');
-  if (ui.card === 'HEALTH') refreshHealth();
+  if (ui.card === 'HEALTH') drawHealth();
 }
 
 // ---- Look: time, follow a fish, tour, sub, microscope (Watch adds the lamp looks: they only change the picture)
@@ -470,7 +494,7 @@ function timeSlider(stops) {
 const STOPS = [1, 10, 60, 240, 600, 1000];
 // My tank: how fast slow things (growing, spreading, babies) happen; animals still move at real speed
 function paceTiles() {
-  const ps = JSON.parse(MY.paces());
+  const ps = JSON.parse(MY.peek.paces() ?? '[]');
   const ico = { REAL: 'clockSun', FAST: 'seaweed', FASTER: 'timelapse' };
   return `<h4>Growing speed</h4><div class="options">${ps.map((p) => tile(`data-pace="${p.id}" title="${esc(p.blurb)}"`, ico[p.id], p.label, p.on)).join('')}</div>`;
 }
@@ -504,7 +528,7 @@ function healthLive() {
   const st = { GOOD: 'good', CAUTION: 'caution', DANGER: 'danger' };
   const s = ui.clockAt;
   const words = ui.worst === 'good' ? 'The water is just right.' : ui.worst === 'caution' ? 'Something in the water needs a look.' : 'The water needs help now!';
-  ui.hungerRows = JSON.parse(SB.hunger());
+  ui.hungerRows ??= [];
   const hungry = ui.hungerRows.filter((r) => r.hungry).length;
   return `<div class="hero"><span class="big">${faceFor(P.happy)}</span><div class="grow">
       <div class="hero-t">Tank happy <b>${P.happy}%</b></div><i class="meter wide"><i class="${P.happy >= 70 ? 'good' : P.happy >= 40 ? 'caution' : 'danger'}" style="width:${P.happy}%"></i></i>
@@ -513,8 +537,14 @@ function healthLive() {
     <div class="readings">${P.readouts.map((r) => `<div class="reading ${st[r.status] ?? 'unknown'}"><span>${esc(r.label)}</span><b>${esc(r.text)}</b></div>`).join('')}</div>
     <h4>Hungry tummies <span class="note ${hungry ? 'caution' : 'good'}">${hungry ? `${hungry} hungry` : ui.hungerRows.length ? 'Everyone is full' : 'No animals yet'}</span></h4>`;
 }
-/** Refreshes the live parts of Tank Health: the header, the feed button's words and every hunger bar. */
-function refreshHealth() {
+/** Refreshes the live parts of Tank Health (fresh hunger and coral numbers first). */
+async function refreshHealth() {
+  const [h, c] = await Promise.all([SB.hunger(), SB.corals()]);
+  ui.hungerRows = JSON.parse(h); ui.coralCare = JSON.parse(c || '{}');
+  drawHealth();
+}
+/** Draws the live parts of Tank Health: the header, the feed button's words and every hunger bar. */
+function drawHealth() {
   const el = $('healthLive');
   if (!el) return;
   el.innerHTML = healthLive();
@@ -529,8 +559,7 @@ function refreshHealth() {
 }
 /** Corals & inverts: how each coral is doing (core CoralHealth) and the one-tap care button (core CoralCare). */
 function refreshCorals() {
-  const c = JSON.parse(SB.corals() || '{}');
-  ui.coralCare = c;
+  const c = ui.coralCare || {};
   const list = c.corals || [];
   const pale = list.filter((k) => k.pale).length;
   const sick = list.filter((k) => !k.pale && k.health < 0.7).length;
@@ -543,7 +572,7 @@ function refreshCorals() {
     <i class="meter"><i class="${k.health >= 0.7 ? 'good' : k.health >= 0.4 ? 'caution' : 'danger'}" style="width:${Math.round(Math.max(0, Math.min(1, k.health)) * 100)}%"></i></i></div>`).join('');
 }
 function fixList() {
-  const f = JSON.parse(SB.fixes());
+  const f = JSON.parse(ui.fixData ?? 'null');
   if (!f) return '';
   if (!f.list.length) {
     return f.busy ? '<p><strong>Fixing...</strong></p><p class="muted">Watch the tank: the fixes are going in one by one.</p>'
@@ -701,7 +730,8 @@ function settingsCard(sb) {
       ${row('data-rocks-toggle', 'rocks', 'Rocks can shift', ui.rocks)}
       <div class="toggle-row"><span class="rlbl">${icon('sparkle')} Picture</span><span class="pills">${['AUTO', 'LOW', 'MEDIUM', 'HIGH'].map((q) => `<button class="pillbtn ${ui.quality === q ? 'on' : ''}" data-quality="${q}">${q[0] + q.slice(1).toLowerCase()}</button>`).join('')}</span></div></div>
     <h4>Help</h4><div class="options">${tile('data-tips', 'help', 'What can I do?')}${tile('data-news', 'sparkle', "What's new")}${tile('data-camreset', 'eye', 'Reset view')}</div>
-    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}`;
+    ${sb ? `<h4>Start again</h4><div class="options">${tile('data-reset', 'reset', 'Start over')}</div>` : ''}
+    ${window.reefBuild && !window.reefBuild.startsWith('__') ? `<p class="buildline">ReefLive build ${esc(window.reefBuild)}</p>` : ''}`;
 }
 
 // ---- card clicks
@@ -709,7 +739,7 @@ const LINES = {
   warmer: 'The heater warms the water up.', cooler: 'Cooler water. Brrr!', saltier: 'A pinch more salt.', fresher: 'Fresh water mixes in.',
   lightsOn: 'Lights on! Good morning, reef.', lightsOff: 'Lights off. Sleepy time.', lightsAuto: 'Back to the normal day and night.',
 };
-$('card').addEventListener('click', (e) => {
+$('card').addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   const d = b.dataset;
@@ -718,17 +748,17 @@ $('card').addEventListener('click', (e) => {
   if ('feedhungry' in d) {
     const n = (ui.hungerRows || []).filter((r) => r.hungry).length;
     if (!n) { say('Everyone is full right now. Check back in a few hours.'); cue('TICK'); return; }
-    if (!MY.useFishFood()) { say('No fish food left on the shelf! Buy some at the fish stores: tap Shop.'); cue('TICK'); return; }
+    if (!(await MY.useFishFood())) { say('No fish food left on the shelf! Buy some at the fish stores: tap Shop.'); cue('TICK'); return; }
     stockChanged();
     SB.act('feedHungry', null, 0); cue('PELLET');
     say(n === 1 ? 'Dinner time! Its favourite food drops right above it.' : `Dinner time! All ${n} hungry ones get their favourite food, right above them.`);
     closeCard(); return;
   }
   if ('reefcare' in d) {
-    sbOnly(() => {
+    sbOnly(async () => {
       const c = ui.coralCare || {};
       if (!c.words) { say('The corals and inverts have all they need right now.'); cue('TICK'); return; }
-      if (!SB.act('reefCare', null, c.price || 0)) { say(`Not enough sand dollars: coral care costs ${c.price}. Do today's chores to earn more.`); cue('TICK'); return; }
+      if (!(await SB.act('reefCare', null, c.price || 0))) { say(`Not enough sand dollars: coral care costs ${c.price}. Do today's chores to earn more.`); cue('TICK'); return; }
       cue('PELLET');
       say(`Coral care! In goes ${c.words}.`);
       closeCard();
@@ -740,7 +770,7 @@ $('card').addEventListener('click', (e) => {
   if ('more' in d) { ui.more = !ui.more; ui.treat = false; ui.sickPick = false; }
   else if (d.pace) {
     MY.setPace(d.pace);
-    const p = JSON.parse(MY.paces()).find((x) => x.id === d.pace);
+    const p = JSON.parse(await MY.paces()).find((x) => x.id === d.pace);
     if (p) say(`${p.blurb}. Fish still swim at real speed.`);
   }
   else if (d.look) { ui.viewLight = d.look; live.setViewLight(d.look); say(d.look === 'REAL' ? 'The lamp follows the clock again.' : 'A new look for the lamp. Only the picture changes.'); }
@@ -883,7 +913,7 @@ function renderFish() {
   live.select(ui.picked || null); // the picked animal keeps full pose detail (TankRenderer.selectedId)
   // a dead animal is not in the living list: its own card offers the net (SB.animal has every animal)
   let a = ui.picked && animals.find((x) => x.id === ui.picked);
-  if (!a && ui.picked) { const d = JSON.parse(SB.animal(ui.picked)); if (d && !d.alive) a = d; }
+  if (!a && ui.picked) { const d = JSON.parse(SB.peek.animal(ui.picked) ?? 'null'); if (d && !d.alive) a = d; }
   // while following, the big card stays out of the view unless the name bar was tapped for more
   $('fish').classList.toggle('hidden', !a || ui.chromeHidden || (!!ui.following && !ui.followInfo));
   if (!a) return;
@@ -911,7 +941,7 @@ $('fish').addEventListener('click', (e) => {
   else if ('ffollow' in d) followFish(ui.following === ui.picked ? null : ui.picked);
   else if ('fam' in d) {
     if (d.fam === 'VIEW_NURSERY') { ui.picked = null; live.nursery(true); say('Here is the nursery tank. Drag anywhere to go back to the big tank.'); }
-    else { SB.act('breed', d.fam, 0); cue('TICK'); if (FAMILY_SAYS[d.fam]) say(FAMILY_SAYS[d.fam]); setTimeout(() => { animals = JSON.parse(SB.animals()); renderFish(); }, 150); }
+    else { SB.act('breed', d.fam, 0); cue('TICK'); if (FAMILY_SAYS[d.fam]) say(FAMILY_SAYS[d.fam]); setTimeout(async () => { animals = JSON.parse(await SB.animals()); renderFish(); }, 150); }
   }
   else if ('fnet' in d) {
     // the card steps aside so the net can be watched; the goodbye plays once it is out
@@ -1029,7 +1059,7 @@ const ROWS = [['feedTin', 'Feed'], ['droplet', 'Care'], ['flask', 'Tools']];
 // My tank's shelf holds only what was bought at the fish stores (core SupplyBook); Watch never runs out
 let stock = null;
 function refreshStock() {
-  try { stock = ui.mode === 'mine' ? JSON.parse(MY.supplies()) : null; } catch { stock = null; }
+  try { stock = ui.mode === 'mine' ? JSON.parse(MY.peek.supplies() ?? 'null') : null; } catch { stock = null; }
 }
 /** Uses left of supply [id] on My tank's shelf, or -1 when it never runs out. */
 function left(id) { const n = stock?.left?.[id]; return n == null ? -1 : n; }
@@ -1097,7 +1127,7 @@ $('musicbar').addEventListener('click', (e) => {
 });
 
 /** A prop picked on the shelf (tapped in 3D or on its tag): run it like SupplyItem.use. */
-function useSupply(id) {
+async function useSupply(id) {
   const s = SUPPLIES.find((x) => x.id === id);
   if (!s) return;
   if (s.sandbox && !editable()) { locked(); return; }
@@ -1105,11 +1135,11 @@ function useSupply(id) {
   if (s.food) {
     const f = C.foods.find((x) => x.id === s.food);
     // nori goes on its clip; every other food waits in the hand until the tank is tapped where it should go
-    if (s.food === 'NORI') { if (!MY.useSupply('nori')) { outOf(s); return; } stockChanged(); SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
+    if (s.food === 'NORI') { if (!(await MY.useSupply('nori'))) { outOf(s); return; } stockChanged(); SB.act('feed', s.food, 0); cue('FEED'); say(`${f.label}! ${f.blurb}`); setTimeout(closeShelf, 700); return; }
     setTimeout(() => { closeShelf(); startAim(s.food); }, 500);
     return;
   }
-  if (left(s.id) > 0 && !MY.useSupply(s.id)) { outOf(s); return; }
+  if (left(s.id) > 0 && !(await MY.useSupply(s.id))) { outOf(s); return; }
   stockChanged();
   s.run();
   if (s.id !== 'test_kit' && ui.shelf) setTimeout(closeShelf, 700);
@@ -1270,8 +1300,8 @@ $('micro').addEventListener('click', (e) => {
   drawMicro(true);
 });
 const GROUP_COLOR = ['#e9d8a6', '#94d2bd', '#ee9b00', '#ca6702', '#bb3e03', '#ae2012', '#9b2226', '#0a9396', '#e0aaff', '#ffd6a5', '#caffbf', '#9bf6ff'];
-function drawMicro(resample) {
-  const m = JSON.parse(SB.micro(micro.scene, micro.zoom, micro.seed + Math.floor(Date.now() / 3.6e6)));
+async function drawMicro(resample) {
+  const m = JSON.parse(await SB.micro(micro.scene, micro.zoom, micro.seed + Math.floor(Date.now() / 3.6e6)));
   if (!m) return;
   const cv = $('microCanvas');
   const dpr = Math.min(2, devicePixelRatio || 1);
@@ -1370,8 +1400,8 @@ $('lapse').addEventListener('input', (e) => {
 });
 function runLapse() {
   $('lapseBody').innerHTML = '<div class="loading inline"><div class="spinner"></div><p>Fast-forwarding a copy of the tank…</p></div>';
-  setTimeout(() => {
-    try { lapse.result = JSON.parse(SB.timelapse(lapse.param, lapse.target, lapse.ramp, lapse.rampHours, lapse.hours, lapse.label)); }
+  setTimeout(async () => {
+    try { lapse.result = JSON.parse(await SB.timelapse(lapse.param, lapse.target, lapse.ramp, lapse.rampHours, lapse.hours, lapse.label)); }
     catch (err) { lapse.result = null; $('lapseBody').innerHTML = `<p class="warn">The time-lapse failed: ${esc(err.message)}</p>`; return; }
     renderLapse();
   }, 60);
@@ -1418,9 +1448,9 @@ function setSoundOn(on) {
   say(on ? 'Sound on. Listen to the bubbles!' : 'Sound off.');
 }
 function stopLoops() { for (const k of Object.keys(loops)) { try { loops[k].src.stop(); } catch { /* already stopped */ } delete loops[k]; } }
-function updateSound() {
+async function updateSound() {
   if (!ui.sound || !actx || document.hidden) return;
-  const s = JSON.parse(SB.sound(ui.volume));
+  const s = JSON.parse(await SB.sound(ui.volume));
   if (!s) return;
   // in a fish store: the shop's room tone under the display tank's water (stores.js rings the door bell)
   s.murmur = window.reefstores?.active() ? 0.35 * ui.volume : 0;
@@ -1683,11 +1713,11 @@ function stopAim() {
   live.aimArm(false);
   $('aimBar')?.classList.add('hidden');
 }
-function aimFed(h) {
+async function aimFed(h) {
   const food = aimUi.food;
   if (!food) return;
   stopAim();
-  if (!MY.useSupply(food.toLowerCase())) { outOf(SUPPLIES.find((s) => s.food === food)); return; }
+  if (!(await MY.useSupply(food.toLowerCase()))) { outOf(SUPPLIES.find((s) => s.food === food)); return; }
   stockChanged();
   SB.feedAt(food, h.x, h.y, h.z);
   const f = C.foods.find((x) => x.id === food);
@@ -1698,8 +1728,8 @@ function aimFed(h) {
 
 // A tap on a piece of gear (skimmer, filter, heater, pumps, lamps, top-off) pops out its own little menu right there.
 const spotUi = { spot: null };
-function openSpot(t) {
-  const m = JSON.parse(SB.spotMenu(t.spot));
+async function openSpot(t) {
+  const m = JSON.parse(await SB.spotMenu(t.spot));
   if (!m) return;
   spotUi.spot = t.spot;
   buzz(5);
@@ -1707,13 +1737,13 @@ function openSpot(t) {
   let el = $('spotPop');
   if (!el) {
     el = document.createElement('div'); el.id = 'spotPop'; el.className = 'spotpop';
-    el.addEventListener('click', (e) => {
+    el.addEventListener('click', async (e) => {
       const b = e.target.closest('button');
       if (!b) return;
       if ('close' in b.dataset) { closeSpot(); return; }
-      const label = b.dataset.label;
-      if (SB.spotAct(spotUi.spot, b.dataset.opt)) { cue('TICK'); say(`${label}: on it!`); setTimeout(tick, 150); }
+      const label = b.dataset.label, spot = spotUi.spot;
       closeSpot();
+      if (await SB.spotAct(spot, b.dataset.opt)) { cue('TICK'); say(`${label}: on it!`); setTimeout(tick, 150); }
     });
     document.body.appendChild(el);
   }

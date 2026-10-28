@@ -33,7 +33,7 @@ There is no second copy of the sim, the shaders or the models.
 - Excluded from the web build: `core/care`, `core/extras`, `core/io` (they use `java.time`; the web tracker keeps its own
   simple log) and the Android-only views (`TankGlView`, `TankView`, `DebugHud`).
 - Updates: every push to `main` (the same pushes that release the APK) rebuilds and republishes the web app; the
-  service worker loads new code on the next launch.
+  service worker fetches the changed files in the background and the next launch runs them (Loading fast).
 - Graphics default to HIGH (bloom, light shafts, 4x MSAA, full device pixel ratio up to 3x); Speed → Picture quality lowers it.
 - Parameter readings are stored in the browser (`localStorage`) and can be exported/imported as JSON. New readings are
   pushed into the live tank with the same `RealityInit` mapping the Android app uses.
@@ -48,6 +48,42 @@ cd web/build/site && python3 -m http.server 8765   # open http://localhost:8765
 
 CI (`.github/workflows/web.yml`) builds the site on every PR and publishes `main` to the `gh-pages` branch, served at
 https://tdprinting.github.io/Live-Fish-tank-tracking-app/ once Settings → Pages uses the `gh-pages` branch.
+
+## Loading fast
+
+The `:web:site` task post-processes the site (`SiteOptimizer` in `web/build.gradle.kts`):
+- `app.js` is the page modules plus the compiled Kotlin bundled and minified by esbuild (`npx esbuild`, needs Node;
+  without it a warning is printed and the plain modules ship, which still work). Source maps are not shipped.
+- `boot.json` packs what `ReefLive.start` reads before the first frame (asset index, shaders, sim tables, species
+  sheets) into one download (`Main.kt loadPack`).
+- Every `.glb` and `.bin` also ships as `.glb.gz` / `.bin.gz`: GitHub Pages sends models uncompressed and gzip halves
+  them. `reefFetch` (inline script in `index.html`) takes the `.gz` and unpacks it with `DecompressionStream`, or the
+  plain file in browsers without it. It also starts the first view's downloads (boot pack, rock field, tank, rock,
+  equipment, shared textures, room, stand, shelf) while the code is still downloading and starting, and remembers what
+  the tank asked for first (`reeflive.firstView.<preset>`) to prefetch that on the next visit. Everything else
+  (store rooms, fish, sandbox species, care tools, life-stage textures) loads when the renderer first asks for it.
+- `sw.js` gets every file's content hash. The service worker caches each file under `path?v=hash` and serves it
+  without asking the network, so a repeat visit downloads nothing; a new build re-downloads only the files that
+  changed, in the background, and the launch after that runs it.
+
+To measure: serve `web/build/site` and load it with the network and CPU throttled (Chrome DevTools, or Playwright
+with `Emulation.setCPUThrottlingRate`); `?stats` shows the frame rate.
+
+## The sim in a worker
+
+The simulation runs in a module Web Worker (`web/site/simworker.js`, its own esbuild bundle), so the page's thread
+only draws and runs the UI. The page reaches the sim only through SimHost (`web/site/simhost.js`): *view* calls answer
+on the page, *send* calls are ordered commands, *call* calls return Promises (each also has a synchronous `peek` of
+its last answer, for drawing only). Kotlin: `ReefLive` is the view, `ReefSim` + `ReefSandbox` + `ReefMyTank` the sim.
+
+- Snapshots go as real Kotlin objects (`web/site/simwire.js`): both sides number the same classes as they load
+  (`simwire-hook.js`), typed arrays travel in one transferred buffer, enum entries and shared constants by position
+  (`WireEnums.kt`, generated from :core by `:web:wireEnums`), immutable cached values once. A class added to a snapshot
+  needs nothing; a new *live* sim object referenced from a snapshot is refused (`ReefWire.forbiddenClasses`).
+- Effects the sim asks of the view (bursts, care shows, the store and room scenes) are `SimFx` messages.
+- My tank's saves: the worker keeps a copy of the localStorage keys; every write goes back to the page.
+- `?noworker` runs everything on the page thread as before (also the automatic fallback). `reeflive.where()` says
+  which; with `?stats` the overlay shows the worker's sim / pack ms and the page's unpack ms.
 
 ## Keeping it compiling
 

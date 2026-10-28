@@ -314,20 +314,22 @@ void rockLife(vec3 p, float fp, float sky, vec3 No, mat3 toW, inout vec3 N, inou
 #endif
 
 const vec3 ROCK_BLEACH = vec3(0.50, 0.42, 0.28);   // sun-bleached cream-tan skeleton
+const vec3 ROCK_WARM = vec3(1.5, 1.0, 0.55);       // baked albedo -> the photos' warm tan (research 11 §4)
+const vec3 SAND_GAIN = vec3(1.68, 1.87, 2.45);     // baked cream sand -> bright, cool aragonite (research 11 §8)
 const vec3 ROCK_GREY = vec3(0.24, 0.21, 0.16);     // older grey limestone
-const vec3 ROCK_FILM = vec3(0.17, 0.19, 0.07);    // olive-green algae film
+const vec3 ROCK_FILM = vec3(0.148, 0.170, 0.036); // olive-yellow turf film, #6B7238 (photo green fuzz)
 const vec3 SHELL_PINK = vec3(0.50, 0.32, 0.30);    // shell grit
 const vec3 SHELL_GREY = vec3(0.24, 0.21, 0.18);    // dark aragonite / rubble grit
 
-const vec3 ALG_HAIR = vec3(0.043, 0.105, 0.027);   // #3B5B2E
+const vec3 ALG_HAIR = vec3(0.148, 0.170, 0.036);   // #6B7238 yellow-olive turf, as in the photos
 const vec3 ALG_DIATOM = vec3(0.26, 0.13, 0.03);    // tan / golden brown
 const vec3 ALG_CYANO = vec3(0.30, 0.020, 0.030);   // burgundy-red slime (reads red, not black, from the room)
 const vec3 ALG_CYANO_DARK = vec3(0.09, 0.006, 0.012); // maroon where little light reaches
 const vec3 ALG_DINO = vec3(0.30, 0.17, 0.05);      // khaki-brown snot
 const vec3 ALG_DINO_DARK = vec3(0.13, 0.075, 0.025); // the thicker brown strands
 const vec3 ALG_BUBBLE = vec3(0.02, 0.07, 0.03);    // glossy dark green
-const vec3 ALG_CORAL_PINK = vec3(0.52, 0.11, 0.19);   // pink-red, as on Tee's rock
-const vec3 ALG_CORAL_PURPLE = vec3(0.20, 0.05, 0.27);
+const vec3 ALG_CORAL_PINK = vec3(0.33, 0.128, 0.17);    // #9A6472 dusty pink, as on Tee's rock
+const vec3 ALG_CORAL_PURPLE = vec3(0.111, 0.055, 0.122); // #5E4462 dusty mauve
 
 // Slimy mats shared by sand and rock (research 09 A6, SIMULATION §11.2).
 // Cyano: burgundy-red sheets with a lighter, lifting edge (it peels in sheets), maroon to black-red where little light
@@ -395,7 +397,9 @@ void main() {
     float glint = 0.0;    // sand sparkle weight
     vec3 glintN = N;
 #ifdef SAND
-    albedo = mix(albedo, vec3(0.27, 0.35, 0.12), clamp(vColor.r, 0.0, 1.0) * 0.55 * (1.0 - wall));
+    // bright, cool aragonite: the bed in the photos is the brightest thing in the tank (blue-white, L ~0.75)
+    albedo *= SAND_GAIN;
+    albedo = mix(albedo, vec3(0.27, 0.35, 0.12), clamp(vColor.r, 0.0, 1.0) * 0.25 * (1.0 - wall));
     {
         // aragonite bed: per-grain tone, sparse shell / rubble grit, broad tone drift, flow ripples, damp contact slopes.
         // Grain detail fades with the pixel footprint so it settles to its mean instead of shimmering at a distance.
@@ -460,7 +464,7 @@ void main() {
         // mounded sand banked against rock and holes is damper and darker
         float slope = 1.0 - smoothstep(0.75, 0.98, N.y);
         float bank = smoothstep(uParams2.w + 0.8, uParams2.w + 4.5, vWorld.y);
-        albedo *= 1.0 - 0.22 * max(slope * step(0.3, N.y), bank * 0.6) * (1.0 - wall);
+        albedo *= 1.0 - 0.30 * max(slope * step(0.3, N.y), bank * 0.6) * (1.0 - wall);
         // glints: one grain in ~25 is a cleaved facet that flashes when it lines up with a fixture
         if (uQuality >= 0.5) {
             vec3 gr = hash33(gc + 11.0);
@@ -512,6 +516,8 @@ void main() {
     float cavity = vColor.r, ridge = vColor.g, sky = vColor.b;
     rough = uRoughness;
     ao = (0.3 + 0.7 * sky) * (1.0 - 0.35 * cavity);
+    // warm tan limestone (photos: hue 25-42); one multiply on the baked albedo
+    albedo *= ROCK_WARM;
     vec3 op = vObj;            // detail coordinates: object space
     mat3 toW = mat3(uModel);   // rigid (no scale): object -> world for gradients and normals
     vec3 No = N * toW;         // world normal in object space (transpose of a rotation)
@@ -581,16 +587,16 @@ void main() {
         albedo.b = mix(albedo.b, albedo.g * 1.15, purple * 0.7);
         // pores too small to resolve keep their average darkening, so the far tone matches the close one
         albedo *= (1.0 - 0.5 * pores * pores) * (1.0 - 0.07 * lost / 3.0) * (0.8 + 0.4 * grit) * (0.8 + 0.4 * mid) * (1.0 - 0.25 * cavity);
-        albedo = mix(albedo, ROCK_BLEACH * 1.1, ridge * 0.2 * (1.0 - pores));
+        albedo = mix(albedo, ROCK_BLEACH * 1.1, ridge * 0.1 * (1.0 - pores));
         ao *= 1.0 - 0.6 * pores * pores;   // deep pore bottoms see little of the water above
         // coralline crust in lit-but-shaded spots, with pale growth margins and its own fine bumps up close
         float cbn = vnoise(op * 0.13 + vec3(19.0, 3.0, 7.0));
         float cb = smoothstep(0.76, 0.86, cbn) * (1.0 - 0.6 * smoothstep(0.1, 0.7, N.y)) * smoothstep(0.15, 0.5, sky);
         float margin = cb * (1.0 - smoothstep(0.25, 0.8, cb));
         // mostly pink-red, as on Tee's rock; purple only in a few deep-shade patches
-        albedo = mix(albedo, mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, smoothstep(0.6, 0.9, mid) * (1.0 - sky)) * (0.65 + 0.35 * grit), cb * 0.3 * (1.0 - pores));
+        albedo = mix(albedo, mix(ALG_CORAL_PINK, ALG_CORAL_PURPLE, smoothstep(0.6, 0.9, mid) * (1.0 - sky)) * (0.65 + 0.35 * grit), cb * 0.22 * (1.0 - pores));
         albedo = mix(albedo, vec3(0.62, 0.52, 0.58), margin * 0.3);
-        rough = mix(rough, 0.42, 0.45 * smoothstep(0.45, 0.8, mid) * (1.0 - pores));
+        rough = mix(rough, 0.6, 0.45 * smoothstep(0.45, 0.8, mid) * (1.0 - pores));
     }
     if (uDryRock > 0.0) {
         // bleached white aragonite fresh from the bag; a tan bacterial / diatom film comes in partway through the cure,
@@ -607,7 +613,7 @@ void main() {
     float hairC = max(uAlgaeTop.x, uAlgaeBloom) * top;
     float coralC = uAlgaeShade.x * mix(1.0, 0.25, top);
     if (hairC + coralC + cv.y + cv.z + cv.w > 0.001) {
-        vec3 rp = op * 0.09;
+        vec3 rp = op * 0.18;
         float n1 = fbm3(rp);
         float n2 = fbm3(rp * 1.9 + vec3(5.0, 23.0, 11.0));
         // coralline: pink/purple matte crust with pale growth margins

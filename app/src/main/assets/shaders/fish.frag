@@ -180,8 +180,8 @@ void main() {
         // soft dome per scale: a wide falloff keeps the edge slopes gentle, so up close the scale rows read as relief
         // in the diffuse light instead of a bright net of specular glints along every scale edge
         float scale = 1.0 - smoothstep(0.05, 0.4, dot(f, f));
-        float vis = (1.0 - smoothstep(0.2, 0.5, length(fwidth(g)))) * step(uPart, 0.5);
-        N = bumpH(N, vWorld, scale * vis * 0.006);
+        float vis = (1.0 - smoothstep(0.12, 0.35, length(fwidth(g)))) * step(uPart, 0.5);
+        N = bumpH(N, vWorld, scale * vis * 0.003);
     }
     // view-angle terms (rim, fresnel, iridescence, clear coat) use the smooth body normal: on the scale relief they
     // light up every scale edge as a white grid when the camera is close
@@ -227,12 +227,12 @@ void main() {
     float shade = gShadow;
     col += irid * rad * (0.35 + 0.65 * pow(1.0 - ndv, 2.0)) * shade;
     // wet skin / shell: a tight clear-coat highlight over the body's own roughness
-    col += wetCoat(Ng, V, vWorld, 0.14, 0.55 * specScale) * shade;
+    col += wetCoat(Ng, V, vWorld, 0.14, 0.35 * specScale) * shade;
     // Fish were nearly invisible against the rock and the blue water. A soft camera-side fill lets the body
     // pattern read in the shade, and a stronger rim (light colour plus a little of the fish's own colour)
     // separates the silhouette from the background. Both follow the light, so night stays dark.
     vec3 lightSum = (uLightColor[0].rgb + uLightColor[1].rgb) * 0.5;
-    col += albedo * 0.10 * (0.15 + lightIntensity());
+    col += albedo * 0.16 * (0.15 + lightIntensity());
     // up close the silhouette needs no help and an unattenuated rim reads as a pale outline: ease it in with distance
     float rim = pow(1.0 - ndv, 2.2) * mix(0.45, 1.0, smoothstep(15.0, 60.0, distance(uCamPos.xyz, vWorld)));
     // the rim is brightest on the top edge (light from the fixtures above) and picks up the water colour below
