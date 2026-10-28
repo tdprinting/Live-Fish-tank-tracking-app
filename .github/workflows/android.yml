@@ -1,7 +1,10 @@
 name: Core tests
 
 # The Android app is no longer built or published; the browser app is the product. The :core sim test suite still
-# runs on every push and pull request (the job keeps the name "build" so existing required checks keep matching).
+# runs on every push and pull request. It runs as SHARDS parallel jobs ("shard"), each running its share of the tests
+# in 4 JVMs (core/build.gradle.kts packs the tests by the measured seconds in core/test-weights.txt). The "build" job
+# (the name existing required checks match) waits for every shard, is green only if all of them passed, and prints the
+# test count and the slowest tests. SimBenchmark is not part of this run: see bench.yml.
 on:
   push:
     branches: [main]
@@ -15,10 +18,18 @@ concurrency:
   group: core-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  SHARDS: 3
+
 jobs:
-  build:
+  shard:
+    name: Core tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@v4
 
@@ -29,13 +40,45 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' || matrix.shard != 0 }}
 
       # -PcoreOnly skips the Android SDK, so only :core (the sim, AI and chemistry) is compiled and tested.
+      # --continue: a failing bin does not stop the other bins of the shard.
       - name: Core unit tests
-        run: ./gradlew -PcoreOnly :core:test --stacktrace
+        run: ./gradlew -PcoreOnly -PtestShards=$SHARDS -PtestShard=${{ matrix.shard }} :core:testShard --continue --stacktrace
 
       - name: Annotate unit test failures
         if: failure()
         run: |
           grep -rh -A3 "<failure" core/build/test-results 2>/dev/null | head -c 1500 | tr '\n' ' ' | sed 's/^/::error::/' || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-test-results-${{ matrix.shard }}
+          path: core/build/test-results/**/*.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  build:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-test-results-*
+          path: results
+
+      - name: Test summary
+        run: python3 .github/scripts/test_report.py results
+
+      - name: All shards passed
+        run: |
+          if [ "${{ needs.shard.result }}" != "success" ]; then
+            echo "::error::core test shards: ${{ needs.shard.result }}"
+            exit 1
+          fi
