@@ -69,6 +69,22 @@ The `:web:site` task post-processes the site (`SiteOptimizer` in `web/build.grad
 To measure: serve `web/build/site` and load it with the network and CPU throttled (Chrome DevTools, or Playwright
 with `Emulation.setCPUThrottlingRate`); `?stats` shows the frame rate.
 
+## The sim in a worker
+
+The simulation runs in a module Web Worker (`web/site/simworker.js`, its own esbuild bundle), so the page's thread
+only draws and runs the UI. The page reaches the sim only through SimHost (`web/site/simhost.js`): *view* calls answer
+on the page, *send* calls are ordered commands, *call* calls return Promises (each also has a synchronous `peek` of
+its last answer, for drawing only). Kotlin: `ReefLive` is the view, `ReefSim` + `ReefSandbox` + `ReefMyTank` the sim.
+
+- Snapshots go as real Kotlin objects (`web/site/simwire.js`): both sides number the same classes as they load
+  (`simwire-hook.js`), typed arrays travel in one transferred buffer, enum entries and shared constants by position
+  (`WireEnums.kt`, generated from :core by `:web:wireEnums`), immutable cached values once. A class added to a snapshot
+  needs nothing; a new *live* sim object referenced from a snapshot is refused (`ReefWire.forbiddenClasses`).
+- Effects the sim asks of the view (bursts, care shows, the store and room scenes) are `SimFx` messages.
+- My tank's saves: the worker keeps a copy of the localStorage keys; every write goes back to the page.
+- `?noworker` runs everything on the page thread as before (also the automatic fallback). `reeflive.where()` says
+  which; with `?stats` the overlay shows the worker's sim / pack ms and the page's unpack ms.
+
 ## Keeping it compiling
 
 Shared code that starts using a new JVM-only or Android API breaks the web build (CI's "Web app" job shows it).

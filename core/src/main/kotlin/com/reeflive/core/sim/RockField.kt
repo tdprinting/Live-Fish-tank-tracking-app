@@ -108,6 +108,8 @@ class DynamicRockSdf(
     var pieceBox: Array<IntArray?> = emptyArray(); private set
     private var stat: FloatArray? = null
     private var comp: FloatArray? = null
+    /** The composite grid [dist] reads once [active] (read only; the web worker ships it to the page's 3D view). */
+    val composite: FloatArray? get() = comp
 
     var moved = BooleanArray(baseCount); private set
     /** Taken out of the tank (aquascape builder): no longer part of the field. */
