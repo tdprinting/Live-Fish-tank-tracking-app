@@ -339,7 +339,7 @@ float gSlime = 0.0;
 // Outbreak mats are judged from the room: a slime that has started to spread (past the hidden ~1 % seed) shows as
 // patches somewhat larger than its cover share, and dense inside them, so a few-percent bloom already reads at the
 // default view; the seed itself stays out of sight.
-float slimeShow(float c) { return smoothstep(0.012, 0.035, c) * max(c, 0.65 * sqrt(max(c, 0.0))); }
+float slimeShow(float c) { return smoothstep(0.012, 0.035, c) * max(c, 0.9 * sqrt(max(c, 0.0))); }
 float slimeDensity(float c) { return mix(0.78, 0.96, smoothstep(0.0, 0.4, c)); }
 // A round bubble of radius r (in cells) at a random spot of each cell of `cells` per cm that passes `keep`: 0..1.
 float bubbleDots(vec3 p, float cells, float keep, float r) {

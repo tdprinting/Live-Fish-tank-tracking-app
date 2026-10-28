@@ -19,8 +19,8 @@ import kotlin.math.sqrt
  * rising cover grows the clusters out from where they started. The sim's bubble cover ([AlgaeVisuals.bubbleCount])
  * picks how many of the first spots show; the last one swells in (uCount).
  *
- * Budget (ARCHITECTURE §8.7): [MAX_SPHERES] × 64 triangles on High, half on Medium and at relief 2, a quarter on Low
- * and at relief 3 (≤ 6.4k triangles in one draw; rock.frag's glossy tint fills in round them), so an outbreak still
+ * Budget (ARCHITECTURE §8.7): [MAX_SPHERES] × 64 triangles on High, half on Medium and at relief 2, an eighth on Low
+ * and at relief 3 (≤ 3.2k triangles in one draw, only while there is an outbreak; rock.frag's glossy tint fills in round them), so an outbreak still
  * reads as green spheres there. The instance buffer is rebuilt only when a rock moves (each sphere rides its rock's
  * pose) or the tank is trimmed.
  */
@@ -39,7 +39,7 @@ class BubbleAlgaeDraw {
 
     /** Spheres this preset and relief level may draw (0 = tint only). */
     fun budget(quality: RenderQuality, relief: Int): Int = when {
-        quality == RenderQuality.LOW || relief >= 3 -> MAX_SPHERES / 4
+        quality == RenderQuality.LOW || relief >= 3 -> MAX_SPHERES / 8
         quality == RenderQuality.HIGH && relief < 2 -> MAX_SPHERES
         else -> MAX_SPHERES / 2
     }
