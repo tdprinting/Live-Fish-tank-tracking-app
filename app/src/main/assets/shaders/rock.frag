@@ -321,9 +321,9 @@ const vec3 SHELL_GREY = vec3(0.24, 0.21, 0.18);    // dark aragonite / rubble gr
 
 const vec3 ALG_HAIR = vec3(0.043, 0.105, 0.027);   // #3B5B2E
 const vec3 ALG_DIATOM = vec3(0.26, 0.13, 0.03);    // tan / golden brown
-const vec3 ALG_CYANO = vec3(0.16, 0.012, 0.016);   // burgundy red slime
-const vec3 ALG_CYANO_DARK = vec3(0.05, 0.004, 0.008); // maroon to black-red where little light reaches
-const vec3 ALG_DINO = vec3(0.24, 0.16, 0.06);      // khaki brown snot
+const vec3 ALG_CYANO = vec3(0.30, 0.020, 0.030);   // burgundy-red slime (reads red, not black, from the room)
+const vec3 ALG_CYANO_DARK = vec3(0.09, 0.006, 0.012); // maroon where little light reaches
+const vec3 ALG_DINO = vec3(0.30, 0.17, 0.05);      // khaki-brown snot
 const vec3 ALG_DINO_DARK = vec3(0.13, 0.075, 0.025); // the thicker brown strands
 const vec3 ALG_BUBBLE = vec3(0.02, 0.07, 0.03);    // glossy dark green
 const vec3 ALG_CORAL_PINK = vec3(0.52, 0.11, 0.19);   // pink-red, as on Tee's rock
@@ -336,20 +336,39 @@ const vec3 ALG_CORAL_PURPLE = vec3(0.20, 0.05, 0.27);
 // the water (uDinoLift) and only a faint stain stays. Covers are 0..1; n is an fbm3 value (cyano takes the low end,
 // dinos the high end, so they sit apart); albedo and roughness are updated in place, gSlime feeds the wet coat.
 float gSlime = 0.0;
-void slimeMats(vec3 p, float n, float cyano, float dinos, float lit, inout vec3 albedo, inout float rough) {
+// Outbreak mats are judged from the room: a slime that has started to spread (past the hidden ~1 % seed) shows as
+// patches somewhat larger than its cover share, and dense inside them, so a few-percent bloom already reads at the
+// default view; the seed itself stays out of sight.
+float slimeShow(float c) { return smoothstep(0.012, 0.035, c) * max(c, 0.9 * sqrt(max(c, 0.0))); }
+float slimeDensity(float c) { return mix(0.78, 0.96, smoothstep(0.0, 0.4, c)); }
+// A round bubble of radius r (in cells) at a random spot of each cell of `cells` per cm that passes `keep`: 0..1.
+float bubbleDots(vec3 p, float cells, float keep, float r) {
+    vec3 q = p * cells;
+    vec3 c = floor(q);
+    float h = hash13(c + 11.0);
+    vec3 at = c + 0.5 + (vec3(hash13(c + 3.0), hash13(c + 7.0), hash13(c + 5.0)) - 0.5) * 0.4;
+    return step(keep, h) * (1.0 - smoothstep(r * 0.6, r, length(q - at)));
+}
+
+void slimeMats(vec3 p, float n, float cyano, float dinos, float lit, vec3 strandScale, inout vec3 albedo, inout float rough) {
     float day = (1.0 - uNight) * clamp(lightIntensity() * 2.0, 0.0, 1.0);
-    float cy = algaePatch(1.0 - n, cyano) * algaeDensity(cyano);
+    float cs = slimeShow(cyano);
+    float cy = algaePatch(1.0 - n, cs) * slimeDensity(cs);
     float lip = cy * (1.0 - smoothstep(0.2, 0.65, cy));
     vec3 sheet = mix(ALG_CYANO_DARK, ALG_CYANO, clamp(lit, 0.0, 1.0)) * (0.8 + 0.4 * vnoise(p * 0.9 + vec3(4.0, 1.0, 7.0)));
     albedo = mix(albedo, sheet, cy);
-    albedo = mix(albedo, ALG_CYANO * 1.7, lip * 0.35);
-    float bub = step(0.94, hash13(floor(p * 2.5))) * cy * day;
-    albedo = mix(albedo, vec3(0.55, 0.6, 0.6), bub * 0.6);
-    float strand = 1.0 - abs(2.0 * vnoise(p * vec3(0.8, 0.12, 0.8)) - 1.0);
-    float di = algaePatch(n, dinos) * algaeDensity(dinos) * mix(0.55, 1.0, strand) * (1.0 - 0.8 * uDinoLift);
-    albedo = mix(albedo, mix(ALG_DINO, ALG_DINO_DARK, smoothstep(0.7, 0.95, strand)), di);
-    float tip = smoothstep(0.86, 0.97, strand) * step(0.8, hash13(floor(p * 3.1) + 5.0)) * di * day;
-    albedo = mix(albedo, vec3(0.72, 0.76, 0.74), tip * 0.8);
+    albedo = mix(albedo, ALG_CYANO * 1.5, lip * 0.35);
+    // O2 trapped under the sheets by day: pale beads big enough to see from the room
+    float bub = bubbleDots(p, 0.9, 0.82, 0.32) * cy * day;
+    albedo = mix(albedo, vec3(0.62, 0.66, 0.66), bub * 0.7);
+    float ds = slimeShow(dinos);
+    float strand = 1.0 - abs(2.0 * vnoise(p * strandScale) - 1.0);
+    float di = algaePatch(n, ds) * slimeDensity(ds) * mix(0.5, 1.0, strand) * (1.0 - 0.8 * uDinoLift);
+    albedo = mix(albedo, mix(ALG_DINO, ALG_DINO_DARK, smoothstep(0.6, 0.92, strand)), di);
+    // bright O2 bubbles held in the snot while the lights are on (the dino tell), more at the strand crests
+    float tip = bubbleDots(p + 3.7, 0.75, 0.7, 0.36) * smoothstep(0.35, 0.8, strand) * step(0.3, di) * day;
+    tip = max(tip, smoothstep(0.86, 0.97, strand) * step(0.8, hash13(floor(p * 3.1) + 5.0)) * di * day);
+    albedo = mix(albedo, vec3(0.80, 0.84, 0.82), tip * 0.85);
     gSlime = clamp(max(cy, 0.6 * di) + tip, 0.0, 1.0);
     rough = mix(rough, 0.22, clamp(max(cy, di), 0.0, 1.0));
 }
@@ -481,7 +500,7 @@ void main() {
         albedo = mix(albedo, ALG_DIATOM, clamp(dia, 0.0, 1.0));
         // stray hair tufts (sand is a poor substrate)
         albedo = mix(albedo, ALG_HAIR, algaePatch(n1, uAlgaeSand.w) * 0.6);
-        slimeMats(vWorld, n1, uAlgaeSand.y, uAlgaeSand.z, 0.8, albedo, rough);
+        slimeMats(vWorld, n1, uAlgaeSand.y, uAlgaeSand.z, 0.8, vec3(0.14, 0.8, 0.5), albedo, rough);
     }
 #else
     // Rock detail levels: the mesh normals are smoothed over ~2 cm (tools/blender/rock_surface.py), and the relief
@@ -606,7 +625,7 @@ void main() {
         albedo = mix(albedo, ALG_BUBBLE, bb);
         rough = mix(rough, 0.15, bb);
         // cyano and dinos sit in the low-flow, low-light places: darker there (sky = open-sky AO)
-        slimeMats(op, n1, cv.y, cv.z, mix(0.2, 1.0, max(top, sky)), albedo, rough);
+        slimeMats(op, n1, cv.y, cv.z, mix(0.3, 1.0, max(top, sky)), vec3(0.8, 0.12, 0.8), albedo, rough);
     }
     // the animals and forams on top of whatever covers the rock
     if (uQuality >= 0.5) rockLife(op, fp, sky, No, toW, N, albedo, rough);

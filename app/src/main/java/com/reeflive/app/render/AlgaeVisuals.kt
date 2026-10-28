@@ -52,14 +52,15 @@ object AlgaeVisuals {
     /**
      * Bubble algae spheres to draw ([BubbleAlgaeDraw]): the rock cover of bubble algae as a share of its cover limit
      * (research 09 A6: 30 % of the rock), shade and top weighted by area as the sim weights its headline, times the
-     * [budget] of instance slots. Fractional: the last sphere grows in.
+     * [budget] of instance slots, on a square-root curve so the first few percent of an outbreak already show a
+     * handful of clusters (spheres are a few px each from the room). Fractional: the last sphere grows in.
      */
     fun bubbleCount(cover: AlgaeCover, budget: Int): Float {
         val shade = cover.cover(AlgaeGroup.BUBBLE, AlgaeSurface.ROCK_SHADE)
         val top = cover.cover(AlgaeGroup.BUBBLE, AlgaeSurface.ROCK_TOP)
         val c = (BUBBLE_SHADE_WEIGHT * shade + (1f - BUBBLE_SHADE_WEIGHT) * top) / BUBBLE_CMAX
         if (c.isNaN() || c <= 0f || budget <= 0) return 0f
-        return c.coerceAtMost(1f) * budget
+        return kotlin.math.sqrt(c.coerceAtMost(1f)) * budget
     }
 
     /** Bubble algae cover limit on rock (AlgaeModel: Cmax 0.3). */

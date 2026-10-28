@@ -589,6 +589,13 @@ class AlgaeModel(config: TankConfig) {
     }
 
     /** Pick up outside edits of the headline covers (first step: initialise every group from the water state). */
+    /**
+     * Picks up an outside edit of the headline covers at once (a sandbox slider or preset), so the renderer shows it
+     * from the next snapshot instead of after the next water step (up to a sim minute; longer than a few seconds of
+     * wall time on a slow device). The same re-seed [step] would do, so the run itself does not change.
+     */
+    fun syncNow(s: WaterState) = syncFromState(s)
+
     private fun syncFromState(s: WaterState) {
         for (g in AlgaeGroup.entries) {
             val v = headlineField(s, g)
