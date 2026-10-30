@@ -37,7 +37,7 @@ const ui = {
   sound: store.get('reeflive.sound', false), volume: store.get('reeflive.volume', 0.6),
   water: store.get('reeflive.water', false), hermie: store.get('reeflive.hermie', true), happy: store.get('reeflive.happy', true),
   rocks: store.get('reeflive.rocksDynamic', true),
-  addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH',
+  addCount: 1, addSize: 'JUVENILE', addGroup: 'FISH', shopTab: 'STORES',
 };
 let onReadingsNeeded = () => {};
 /** Every lever works: My tank (the keeper's own saved tank). Watch's fast-forward copy keeps Watch's menu. */
@@ -479,7 +479,7 @@ async function renderCard() {
   }
   $('card').className = `sheet tone-${CATS[ui.card].tone}`;
   $('card').innerHTML = `<div class="card-head"><strong><span class="hico">${icon(CATS[ui.card].ico)}</span>${CATS[ui.card].label}</strong>
-    <span>${['LIFE', 'TANK'].includes(ui.card) ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
+    <span>${ui.card === 'TANK' || (ui.card === 'LIFE' && ui.mode !== 'mine') ? `<button class="pillbtn" data-more>${ui.more ? 'Less' : 'More'}</button>` : ''}
     <button class="icon-btn" data-close aria-label="Close">✕</button></span></div><div class="card-body">${h}</div>`;
   $('card').classList.remove('hidden');
   if (ui.card === 'HEALTH') drawHealth();
@@ -593,8 +593,11 @@ const FIX_SAY = { EMPTY_SKIMMER: "Eww, skimmer goo! Cup's clean now.", SWAP_SOCK
 function lifeCard(sb) {
   // My tank buys its animals at the fish stores (docs/ECONOMY.md §5); the free gallery stays in the Sandbox
   if (ui.mode === 'mine') {
-    return `${streetHtml()}
-    ${roomHtml()}
+    // two tabs instead of one long scroll: animals and helpers at the stores, or doing up the room round the tank
+    const tabs = [['STORES', 'fish', 'Fish stores'], ['ROOM', 'tank', 'Your room']];
+    const head = `<div class="pills shoptabs">${tabs.map(([t, i, n]) => `<button class="pillbtn ${ui.shopTab === t ? 'on' : ''}" data-shoptab="${t}">${icon(i)} ${n}</button>`).join('')}</div>`;
+    if (ui.shopTab === 'ROOM') return head + roomHtml();
+    return `${head}${streetHtml()}
     <h4>Helpers</h4><div class="options">
       ${tile('data-micro="DOSE_TISBE"', 'food:PODS', 'Pods', false, !sb)}${tile('data-micro="DOSE_PHYTO"', 'food:PLANKTON', 'Phyto', false, !sb)}
       ${tile('data-shells', 'shell', 'Spare shells', false, !sb)}</div>`;
@@ -789,6 +792,7 @@ $('card').addEventListener('click', async (e) => {
   else if (d.follow) { closeCard(); followFish(d.follow); return; }
   else if (d.room) { roomClick(d.room, closeCard); return; }
   else if (d.store) { if (b.getAttribute('aria-disabled') === 'true') { say('Do your care jobs to level up and this store opens!'); return; } closeCard(); window.reefstores.enter(d.store); return; }
+  else if (d.shoptab) { ui.shopTab = d.shoptab; cue('TICK'); }
   else if (d.group) ui.addGroup = d.group;
   else if (d.count) ui.addCount = Number(d.count);
   else if (d.size) ui.addSize = d.size;
